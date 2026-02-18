@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>客訂系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body { 
+      font-family: "Noto Sans TC", system-ui, -apple-system, sans-serif; 
+      background-color: #f3f4f6;
+      color: #1f2937;
+      font-size: 15px;
+    }
+    
+    /* === 核心：手機版卡片式表格 (RWD Table) === */
+    .responsive-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    
+    @media (max-width: 768px) {
+      .responsive-table thead { display: none; }
+      
+      .responsive-table tbody tr {
+        display: block;
+        margin-bottom: 1rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        border: 1px solid #e5e7eb;
+        padding: 0.75rem;
+        position: relative;
+      }
+      
+      .responsive-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.4rem 0;
+        border-bottom: 1px solid #f3f4f6;
+        text-align: right;
+        font-size: 0.95rem;
+      }
+      .responsive-table td:last-child { border-bottom: none; }
+      
+      .responsive-table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #6b7280;
+        font-size: 0.85rem;
+        margin-right: 1rem;
+        text-align: left;
+        min-width: 80px; 
+      }
+      
+      .responsive-table td.mobile-full-width {
+        display: block;
+        text-align: left;
+      }
+      .responsive-table td.mobile-full-width::before {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+    }
+
+    @media (min-width: 769px) {
+      .table-container {
+        border-radius: 0.5rem;
+        background: white;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+      .responsive-table th {
+        background-color: #f8fafc;
+        color: #475569;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        white-space: nowrap;
+      }
+      .responsive-table td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #f1f5f9;
+        white-space: nowrap;
+        vertical-align: middle; 
+      }
+    }
+
+    /* === 元件樣式 === */
+    .btn { 
+      transition: all 0.2s; 
+      display: inline-flex; align-items: center; justify-content: center; 
+      font-weight: 500; border-radius: 0.5rem;
+    }
+    .btn:active { transform: scale(0.96); }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600;
+      white-space: nowrap;
+    }
+    .status-badge.pending { background:#f3f4f6; color:#4b5563; }
+    .status-badge.purchase { background:#e0e7ff; color:#4338ca; }
+    .status-badge.arrived { background:#f3e8ff; color:#7e22ce; }
+    .status-badge.missed { background:#ffedd5; color:#c2410c; }
+    .status-badge.notified { background:#e0f2fe; color:#0369a1; }
+    .status-badge.closed { background:#dcfce7; color:#15803d; }
+    
+    .tag { display:inline-flex; align-items:center; padding:0.1rem 0.5rem; margin:0.1rem; font-size:0.75rem; background:#fff; border:1px solid #d1d5db; color:#374151; border-radius:4px; }
+    .tag .remove { margin-left:0.25rem; cursor:pointer; font-weight:bold; color:#ef4444; }
+    .tag .remove:hover { color:#b91c1c; }
+
+    .tab-scroll-container {
+      display: flex; gap: 0.5rem; overflow-x: auto; 
+      padding-bottom: 0.5rem; margin-bottom: 0.5rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tab-btn {
+      padding: 0.4rem 0.8rem;
+      border-radius: 99px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      color: #4b5563;
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .tab-btn.active {
+      background: #4f46e5;
+      color: white;
+      border-color: #4f46e5;
+      box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
+    }
+
+    .modal-backdrop { 
+      background-color: rgba(0,0,0,0.5); 
+      backdrop-filter: blur(3px);
+    }
+    .modal-card {
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      max-height: 90vh;
+    }
+
+    .input-field {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.95rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      background-color: #fff;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+    
+    .input-field:disabled, .select-disabled {
+      background-color: #f3f4f6;
+      color: #9ca3af;
+      cursor: not-allowed;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .section-title::after {
+      content: ""; flex: 1; height: 1px; background: #e5e7eb;
+    }
+
+    .loader {
+      border: 3px solid #f3f3f3; border-top: 3px solid #6366f1;
+      border-radius: 50%; width: 24px; height: 24px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    .accordion-content {
+      transition: grid-template-rows 0.3s ease-out;
+      display: grid;
+      grid-template-rows: 0fr;
+    }
+    .accordion-content.open {
+      grid-template-rows: 1fr;
+    }
+    .accordion-inner { 
+      overflow: hidden; 
+      min-height: 0;
+    }
+    .accordion-toggle {
+      width: 100%; 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      padding: 1rem 1.25rem; 
+      background-color: white; 
+      transition: background-color 0.2s;
+      border-left-width: 4px;
+    }
+    .accordion-toggle:hover { background-color: #f9fafb; }
+    .accordion-toggle.border-indigo-500 { border-left-color: #6366f1; }
+    .accordion-toggle.border-blue-500 { border-left-color: #3b82f6; }
+    .accordion-toggle.border-red-500 { border-left-color: #ef4444; }
+    .accordion-title {
+      font-weight: 700;
+      font-size: 1rem;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* 捲動容器高度 */
+    #dataTableContainer, #longTerm_dataTableContainer, #blacklist_dataTableContainer, #historyDataContainer {
+      max-height: 750px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="bg-white shadow-sm sticky top-0 z-50 border-b border-gray-100">
+    <div class="w-full max-w-[96%] mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="bg-indigo-600 text-white p-1.5 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+        </div>
+        <h1 class="text-lg font-bold text-gray-800 tracking-tight">客訂系統</h1>
+      </div>
+      <div id="currentStoreBadge" class="hidden px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium"></div>
+    </div>
+  </nav>
+
+  <main class="w-full max-w-[96%] mx-auto p-4 space-y-5 pb-20">
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div class="flex items-center gap-4 w-full sm:w-auto">
+          <div class="relative flex-1 sm:flex-none sm:min-w-[180px]">
+            <select id="storeSelect" class="input-field appearance-none pr-8 font-medium text-gray-700">
+              <option value="">請選擇店別</option>
+            </select>
+            <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                <input id="storeLockCheckbox" type="checkbox" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
+                <span class="text-sm font-medium text-gray-600">鎖定</span>
+            </label>
+            
+            <label class="flex items-center gap-2 cursor-pointer select-none group" title="開啟後，若訂單逾期5天未更新，將發送LINE通知">
+                <div class="relative">
+                  <input type="checkbox" id="notifyToggle" class="sr-only peer">
+                  <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </div>
+                <span class="text-sm font-medium text-gray-600 group-hover:text-blue-600">逾期通知</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="flex gap-2 w-full sm:w-auto">
+          <button id="backupBtn" class="w-1/2 sm:w-auto btn bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 px-3 py-2 text-sm">
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+            備份資料
+          </button>
+          <button id="refreshStoresBtn" class="w-1/2 sm:w-auto btn bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-2 text-sm">
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            重整分店
+          </button>
+        </div>
+      </div>
+      <div id="top-message" class="mt-2 text-sm font-medium hidden"></div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <button id="formToggleBtn" class="accordion-toggle border-indigo-500 border-b border-gray-100">
+        <div class="accordion-title">
+          <span class="text-indigo-600 text-xl">📝</span>
+          <span>新增客訂單</span>
+        </div>
+        <svg id="arrowIcon" class="w-5 h-5 text-gray-400 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+      </button>
+
+      <div id="formContent" class="accordion-content">
+        <div class="accordion-inner">
+          <form id="orderForm" class="p-4 sm:p-6 space-y-6">
+            <div>
+              <div class="section-title">顧客資料</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label class="block text-xs font-medium text-gray-500 mb-1">客號</label><input name="客號" type="text" class="input-field" placeholder="輸入客號" /></div>
+                <div><label class="block text-xs font-medium text-gray-500 mb-1">姓名</label><input name="姓名" type="text" class="input-field" placeholder="顧客姓名" /></div>
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-medium text-gray-500 mb-1">電話</label>
+                  <input id="phone" name="連絡電話" type="tel" class="input-field" placeholder="09xx-xxx-xxx" />
+                  <div id="phone-warning" class="hidden mt-1 text-xs text-red-600 font-bold bg-red-50 p-2 rounded flex items-center gap-1"><span>⚠️ 此號碼在黑名單中！</span></div>
+                </div>
+                <div class="sm:col-span-2 bg-green-50/50 p-3 rounded-lg border border-green-100">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">LINE 資訊</label>
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-2 cursor-pointer select-none border-r border-green-200 pr-3">
+                           <input name="Line通知" type="checkbox" value="是" class="w-4 h-4 text-green-600 rounded focus:ring-green-500" />
+                           <span class="text-sm font-bold text-green-700">LINE通知</span>
+                        </label>
+                        <input name="LINE名稱" type="text" class="input-field flex-1 text-sm" placeholder="請輸入 LINE 名稱" />
+                    </div>
+                </div>
+              </div>
+              <div class="flex gap-4 mt-3">
+                 <label class="flex items-center gap-2 cursor-pointer"><input name="付清" type="checkbox" value="是" class="w-4 h-4 text-indigo-600 rounded" /><span class="text-sm text-gray-700">已付清</span></label>
+                 <label class="flex items-center gap-2 cursor-pointer"><input name="固定/長期客訂" type="checkbox" value="是" class="w-4 h-4 text-indigo-600 rounded" /><span class="text-sm text-gray-700">長期客訂</span></label>
+              </div>
+            </div>
+
+            <div class="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100">
+              <div class="section-title text-indigo-600 !border-indigo-200">客訂商品 A (必填)</div>
+              <div class="space-y-3">
+                <input name="客訂商品A" type="text" required class="input-field border-indigo-200 focus:border-indigo-500" placeholder="商品名稱" />
+                <div class="flex gap-3">
+                  <input name="A商品規格" type="text" class="input-field flex-1 border-indigo-200" placeholder="規格/重量" />
+                  <input name="A數量" type="number" min="1" required class="input-field w-24 text-center border-indigo-200" placeholder="數量" />
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <div class="section-title">客訂商品 B (選填)</div>
+              <div class="space-y-3">
+                <input name="客訂商品B" type="text" class="input-field bg-white" placeholder="商品名稱" />
+                <div class="flex gap-3">
+                  <input name="B商品規格" type="text" class="input-field flex-1 bg-white" placeholder="規格/重量" />
+                  <input name="B數量" type="number" min="1" class="input-field w-24 text-center bg-white" placeholder="數量" />
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-2"><label class="block text-xs font-medium text-gray-500 mb-1">備註</label><textarea name="備註" rows="2" class="input-field" placeholder="其他備註事項..."></textarea></div>
+            <div class="pt-2">
+              <button type="submit" id="submitButton" class="w-full btn bg-indigo-600 hover:bg-indigo-700 text-white py-3 text-lg shadow-lg shadow-indigo-200">送出訂單</button>
+              <div id="message-box" class="hidden mt-3 p-3 rounded-lg text-center text-sm font-medium"></div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div class="space-y-3 mb-4">
+        <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2"><span>📋</span> 訂單管理</h2>
+        <div class="flex gap-2 flex-wrap sm:flex-nowrap">
+          <div class="relative flex-1 w-full">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></span>
+            <input id="searchInput" type="text" class="input-field pl-10" placeholder="搜尋姓名、電話、客號..." />
+          </div>
+          <button id="searchButton" class="btn bg-gray-800 text-white px-4 hover:bg-gray-900 shrink-0">搜尋</button>
+          <button id="searchHistoryBtn" class="btn bg-blue-600 text-white px-4 hover:bg-blue-700 shrink-0 shadow-sm border border-blue-700">
+             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+             查詢歷史
+          </button>
+        </div>
+        <div class="flex justify-between items-center pt-1">
+           <div class="tab-scroll-container flex-1" id="statusTabs"></div>
+           <div class="flex gap-2 ml-2 shrink-0">
+             <button id="refreshButton" class="btn bg-white border border-gray-200 text-gray-600 p-2 rounded-full shadow-sm hover:bg-gray-50" title="重新整理">↺</button>
+             <button id="clearOverdueBtn" class="btn bg-white border border-orange-200 text-orange-600 px-3 py-1 text-xs hover:bg-orange-50">清除逾期</button>
+           </div>
+        </div>
+      </div>
+
+      <div id="dataContainer" class="relative">
+        <div id="dataLoader" class="hidden absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm"><div class="loader"></div></div>
+        <div id="data-message-box" class="hidden p-3 mb-3 bg-blue-50 text-blue-700 rounded-lg text-sm text-center"></div>
+        <p id="noDataText" class="hidden text-center py-10 text-gray-400">沒有找到符合的訂單</p>
+        <div id="dataTableContainer" class="table-container hidden">
+          <table class="responsive-table">
+            <thead><tr id="data-table-headers"></tr></thead>
+            <tbody id="data-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <button id="longTermToggleBtn" class="accordion-toggle border-blue-500 border-b border-gray-100">
+        <div class="accordion-title">
+          <span class="text-blue-600 text-xl">📅</span>
+          <span>長期客訂管理</span>
+        </div>
+        <svg id="longTermArrowIcon" class="w-5 h-5 text-gray-400 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+      </button>
+
+      <div id="longTermContent" class="accordion-content">
+        <div class="accordion-inner">
+          <div class="p-4">
+            <div class="flex gap-2 mb-3">
+              <div class="relative flex-1"><input id="longTerm_searchInput" type="text" class="input-field" placeholder="搜尋長期客訂..." /></div>
+              <button id="longTerm_searchButton" class="btn bg-blue-600 text-white px-4">搜尋</button>
+              <button id="longTerm_refreshButton" class="btn bg-white border border-gray-200 text-gray-600">↺</button>
+            </div>
+            <div id="longTerm_dataContainer" class="relative min-h-[100px]">
+              <div id="longTerm_dataLoader" class="hidden absolute inset-0 z-10 flex items-center justify-center bg-white/80"><div class="loader"></div></div>
+              <p id="longTerm_noDataText" class="hidden text-center py-4 text-gray-400">無長期訂單</p>
+              <div id="longTerm_dataTableContainer" class="table-container hidden">
+                <table class="responsive-table">
+                  <thead><tr id="longTerm_data-table-headers"></tr></thead>
+                  <tbody id="longTerm_data-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <button id="blacklistToggleBtn" class="accordion-toggle border-red-500 border-b border-gray-100">
+        <div class="accordion-title">
+          <span class="text-red-600 text-xl">🚫</span>
+          <span>黑名單管理</span>
+        </div>
+        <svg id="blacklistArrowIcon" class="w-5 h-5 text-gray-400 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+      </button>
+
+      <div id="blacklistContent" class="accordion-content">
+        <div class="accordion-inner">
+          <div class="p-4">
+            <div class="flex gap-2 mb-3">
+              <div class="relative flex-1"><input id="blacklist_searchInput" type="text" class="input-field" placeholder="搜尋黑名單..." /></div>
+              <button id="blacklist_searchButton" class="btn bg-gray-600 text-white px-4">搜尋</button>
+              <button id="blacklist_addButton" class="btn bg-red-600 text-white px-4">新增</button>
+            </div>
+            <div id="blacklist_dataContainer" class="relative min-h-[100px]">
+              <div id="blacklist_dataLoader" class="hidden absolute inset-0 z-10 flex items-center justify-center bg-white/80"><div class="loader"></div></div>
+              <p id="blacklist_noDataText" class="hidden text-center py-4 text-gray-400">無黑名單資料</p>
+              <div id="blacklist_dataTableContainer" class="table-container hidden">
+                <table class="responsive-table">
+                  <thead id="blacklist_data-table-headers">
+                      <tr>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">狀態</th>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">操作</th>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">客號</th>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">姓名</th>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">電話</th>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">店別</th>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">原因</th>
+                        <th class="sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap">日期</th>
+                      </tr>
+                  </thead>
+                  <tbody id="blacklist_data-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="blacklist-alert-bar" class="fixed bottom-0 inset-x-0 bg-red-600 text-white p-3 text-center font-bold shadow-lg z-50 hidden transform transition-transform translate-y-full"></div>
+
+  <div id="historyModalBackdrop" class="modal-backdrop hidden fixed inset-0 z-[60]">
+    <div class="modal-card w-full max-w-4xl m-4 max-h-[90vh]">
+      <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-blue-50">
+        <h3 class="font-bold text-blue-800 text-lg">📜 歷史客訂資料 (唯讀)</h3>
+        <button id="closeHistoryModal" class="text-gray-400 hover:text-gray-600 p-1">&times;</button>
+      </div>
+      <div class="p-4 bg-white flex flex-col h-full">
+         <div class="flex gap-2 mb-3">
+            <input id="historySearchInput" type="text" class="input-field" placeholder="搜尋歷史訂單 (姓名、電話、商品...)" />
+            <button id="historySearchBtn" class="btn bg-blue-600 text-white px-4">搜尋</button>
+         </div>
+         <div id="historyDataContainer" class="flex-1 overflow-auto border border-gray-200 rounded-lg relative min-h-[300px]">
+            <div id="historyLoader" class="hidden absolute inset-0 z-10 flex items-center justify-center bg-white/80"><div class="loader"></div></div>
+            <p id="historyNoData" class="hidden text-center py-10 text-gray-400">請輸入關鍵字進行搜尋</p>
+            <table class="responsive-table min-w-max">
+               <thead><tr id="history-table-headers"></tr></thead>
+               <tbody id="history-table-body"></tbody>
+            </table>
+         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="backupModalBackdrop" class="modal-backdrop hidden fixed inset-0 z-[70]">
+    <div class="modal-card w-full max-w-sm m-4">
+      <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-green-50">
+        <h3 class="font-bold text-green-800 text-lg">備份確認</h3>
+        <button id="closeBackupModal" class="text-gray-400 hover:text-gray-600">&times;</button>
+      </div>
+      <div class="p-6">
+        <div id="backupModalContent" class="text-gray-700 mb-6">
+           </div>
+        <div class="flex justify-end gap-3">
+           <button id="cancelBackupBtn" class="btn bg-gray-100 text-gray-600 px-4 py-2 hover:bg-gray-200">取消</button>
+           <button id="confirmBackupBtn" class="btn bg-green-600 text-white px-4 py-2 shadow-md shadow-green-200 hover:bg-green-700">確認備份</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="editModalBackdrop" class="modal-backdrop hidden fixed inset-0 z-[60]">
+    <div class="modal-card w-full max-w-lg m-4 max-h-[90vh]">
+      <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+        <h3 class="font-bold text-gray-800 text-lg">編輯訂單</h3>
+        <button id="closeEditModal" class="text-gray-400 hover:text-gray-600 p-1"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+      </div>
+      <div class="overflow-y-auto p-4 sm:p-6 bg-white">
+        <form id="editForm" class="space-y-5">
+          <input type="hidden" id="editRowIndex" name="row" />
+          <div class="grid grid-cols-2 gap-3">
+             <div class="col-span-1"><label class="text-xs text-gray-500">客號</label><input id="editCustomerID" name="客號" class="input-field mt-1" /></div>
+             <div class="col-span-1"><label class="text-xs text-gray-500">姓名</label><input id="editCustomerName" name="姓名" class="input-field mt-1" /></div>
+             <div class="col-span-2"><label class="text-xs text-gray-500">電話</label><input id="editPhone" name="連絡電話" class="input-field mt-1" /></div>
+             
+             <!-- 分店調撥區域 -->
+             <div class="col-span-2 bg-purple-50 p-3 rounded-lg border border-purple-100">
+               <div class="flex justify-between items-center mb-2">
+                 <label class="text-xs font-bold text-purple-700">分店調撥 (店名+日期)</label>
+                 <button type="button" id="clearStoreTransfer" class="text-xs text-gray-400 hover:text-gray-600">清除</button>
+               </div>
+               
+               <div class="flex flex-wrap gap-2 mb-2" id="storeTransferOptions">
+                 <!-- JS 動態插入分店按鈕 -->
+               </div>
+               
+               <div class="flex gap-2">
+                 <input id="editTransferStoreInput" type="text" class="input-field flex-1 text-sm" placeholder="輸入店名" />
+                 <input id="editTransferDateInput" type="date" class="input-field w-32 text-sm" />
+               </div>
+               <!-- 儲存最終格式：⇄ 店名 YYYY/MM/DD -->
+               <input type="hidden" id="editStoreTransfer" name="分店調撥" />
+             </div>
+
+             <div class="col-span-2 bg-green-50 p-3 rounded-lg border border-green-100 flex items-center gap-3">
+                <label class="flex items-center gap-2 cursor-pointer select-none border-r border-green-200 pr-3">
+                   <input id="editLineNotify" name="Line通知" type="checkbox" value="是" class="w-4 h-4 text-green-600 rounded focus:ring-green-500" />
+                   <span class="text-sm font-bold text-green-700">LINE通知</span>
+                </label>
+                <input id="editLineName" name="LINE名稱" type="text" class="input-field flex-1 text-sm h-8" placeholder="LINE 名稱" />
+             </div>
+             
+             <div class="col-span-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
+               <div class="flex gap-2 mb-2"><input id="editProductAName" name="客訂商品A" class="input-field flex-[3]" placeholder="商品 A" /><input id="editProductAQty" name="A數量" type="number" class="input-field flex-[1] text-center" placeholder="數" /></div>
+               <input id="editProductASpec" name="A商品規格" class="input-field text-sm" placeholder="規格 A" />
+             </div>
+             <div class="col-span-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
+               <div class="flex gap-2 mb-2"><input id="editProductBName" name="客訂商品B" class="input-field flex-[3]" placeholder="商品 B" /><input id="editProductBQty" name="B數量" type="number" class="input-field flex-[1] text-center" placeholder="數" /></div>
+               <input id="editProductBSpec" name="B商品規格" class="input-field text-sm" placeholder="規格 B" />
+             </div>
+
+             <div class="col-span-2 space-y-2 pt-2">
+               <div class="flex items-center gap-2"><span class="text-xs text-gray-500 w-14">採購</span><input id="editPurchaseDate" name="採購日期" type="date" class="input-field flex-1 py-1 text-sm" /><button type="button" class="btn bg-blue-100 text-blue-700 text-xs px-2 py-1" data-target="editPurchaseDate">今</button></div>
+               
+               <div class="flex items-center gap-2"><span class="text-xs text-gray-500 w-14">到貨</span><input id="editArrivalDate" name="到貨日期" type="date" class="input-field flex-1 py-1 text-sm" /><button type="button" class="btn bg-blue-100 text-blue-700 text-xs px-2 py-1" data-target="editArrivalDate">今</button></div>
+               
+               <div class="bg-red-50 p-2 rounded border border-red-100">
+                   <div class="flex items-center gap-2 mb-1">
+                       <span class="text-xs font-bold text-red-500 w-14">未接</span>
+                       <input id="editMissedInput" type="date" class="input-field flex-1 py-1 text-sm" />
+                       <button type="button" id="editAddMissed" class="btn bg-white border border-gray-200 text-gray-600 text-xs px-2 py-1">+</button>
+                       <button type="button" id="editStampMissed" class="btn bg-red-100 text-red-600 text-xs px-2 py-1">今</button>
+                   </div>
+                   <div id="editMissedTags" class="flex flex-wrap gap-1"></div>
+               </div>
+
+               <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                   <div class="flex items-center gap-2 mb-1">
+                       <span class="text-xs font-bold text-blue-500 w-14">通知</span>
+                       <input id="editNotifyInput" type="date" class="input-field flex-1 py-1 text-sm" />
+                       <button type="button" id="editAddNotify" class="btn bg-white border border-gray-200 text-gray-600 text-xs px-2 py-1">+</button>
+                       <button type="button" id="editStampNotify" class="btn bg-blue-100 text-blue-600 text-xs px-2 py-1">今</button>
+                   </div>
+                   <div id="editNotifyTags" class="flex flex-wrap gap-1"></div>
+               </div>
+
+               <div class="flex items-center gap-2"><span class="text-xs text-gray-500 w-14">取走</span><input id="editPickupDate" name="取走日期" type="date" class="input-field flex-1 py-1 text-sm" /><button type="button" class="btn bg-blue-100 text-blue-700 text-xs px-2 py-1" data-target="editPickupDate">今</button></div>
+             </div>
+
+             <div class="col-span-2 py-2"><label class="flex items-center gap-2 select-none"><input id="editPaid" name="付清" type="checkbox" value="是" class="w-4 h-4 text-indigo-600 rounded" /><span class="text-sm font-medium">已付清</span></label></div>
+             <div class="col-span-2"><label class="text-xs text-gray-500">備註</label><textarea id="editNotes" name="備註" rows="2" class="input-field mt-1"></textarea></div>
+             <input type="hidden" id="editMissedHidden" name="未接電話日期" /><input type="hidden" id="editNotifyHidden" name="通知日期" />
+          </div>
+          <div class="pt-4 border-t border-gray-100 flex gap-3">
+             <button type="button" id="deleteEdit" class="btn flex-1 bg-red-50 text-red-600 py-2.5 hover:bg-red-100">刪除</button>
+             <button type="submit" id="saveEdit" class="btn flex-[2] bg-indigo-600 text-white py-2.5 shadow-md shadow-indigo-200 hover:bg-indigo-700">儲存變更</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="longTerm_editModalBackdrop" class="modal-backdrop hidden fixed inset-0 z-[60]">
+    <div class="modal-card w-full max-w-lg m-4 max-h-[90vh]">
+      <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-blue-50">
+        <h3 class="font-bold text-blue-800 text-lg">長期客訂編輯</h3>
+        <button id="longTerm_closeEditModal" class="text-gray-400 hover:text-gray-600">&times;</button>
+      </div>
+      <div class="overflow-y-auto p-4">
+        <form id="longTerm_editForm" class="space-y-4">
+          <input type="hidden" id="longTerm_editRowIndex" name="row" />
+          <div class="grid grid-cols-2 gap-3">
+             <input id="longTerm_editCustomerID" name="客號" class="input-field" placeholder="客號" />
+             <input id="longTerm_editCustomerName" name="姓名" class="input-field" placeholder="姓名" />
+             <input id="longTerm_editPhone" name="連絡電話" class="input-field col-span-2" placeholder="電話" />
+             
+             <div class="col-span-2 bg-gray-50 p-2 rounded border">
+                <input id="longTerm_editProductAName" name="客訂商品A" class="input-field mb-2" placeholder="商品A" />
+                <div class="flex gap-2"><input id="longTerm_editProductASpec" name="A商品規格" class="input-field flex-1" placeholder="規格" /><input id="longTerm_editProductAQty" name="A數量" class="input-field w-20 text-center" placeholder="數" /></div>
+             </div>
+             
+             <div class="col-span-2 space-y-2 pt-2">
+               <div class="bg-gray-50 p-2 rounded border">
+                 <div class="flex items-center gap-2 mb-1"><span class="text-xs font-bold text-blue-600 w-14">採購</span><input id="longTerm_editPurchaseInput" type="date" class="input-field flex-1 py-1 text-sm"/><button type="button" id="longTerm_editAddPurchase" class="btn bg-white border text-xs px-2">+</button><button type="button" id="longTerm_editStampPurchase" class="btn bg-blue-100 text-blue-600 text-xs px-2">今</button></div>
+                 <div id="longTerm_editPurchaseTags" class="flex flex-wrap gap-1"></div>
+               </div>
+               <div class="bg-gray-50 p-2 rounded border">
+                 <div class="flex items-center gap-2 mb-1"><span class="text-xs font-bold text-purple-600 w-14">到貨</span><input id="longTerm_editArrivalInput" type="date" class="input-field flex-1 py-1 text-sm"/><button type="button" id="longTerm_editAddArrival" class="btn bg-white border text-xs px-2">+</button><button type="button" id="longTerm_editStampArrival" class="btn bg-purple-100 text-purple-600 text-xs px-2">今</button></div>
+                 <div id="longTerm_editArrivalTags" class="flex flex-wrap gap-1"></div>
+               </div>
+               <div class="bg-red-50 p-2 rounded border border-red-100">
+                 <div class="flex items-center gap-2 mb-1"><span class="text-xs font-bold text-red-500 w-14">未接</span><input id="longTerm_editMissedInput" type="date" class="input-field flex-1 py-1 text-sm"/><button type="button" id="longTerm_editAddMissed" class="btn bg-white border text-xs px-2">+</button><button type="button" id="longTerm_editStampMissed" class="btn bg-red-100 text-red-600 text-xs px-2">今</button></div>
+                 <div id="longTerm_editMissedTags" class="flex flex-wrap gap-1"></div>
+               </div>
+               <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                 <div class="flex items-center gap-2 mb-1"><span class="text-xs font-bold text-blue-500 w-14">通知</span><input id="longTerm_editNotifyInput" type="date" class="input-field flex-1 py-1 text-sm"/><button type="button" id="longTerm_editAddNotify" class="btn bg-white border text-xs px-2">+</button><button type="button" id="longTerm_editStampNotify" class="btn bg-blue-100 text-blue-600 text-xs px-2">今</button></div>
+                 <div id="longTerm_editNotifyTags" class="flex flex-wrap gap-1"></div>
+               </div>
+               <div class="bg-gray-50 p-2 rounded border">
+                 <div class="flex items-center gap-2 mb-1"><span class="text-xs font-bold text-green-600 w-14">取走</span><input id="longTerm_editPickupInput" type="date" class="input-field flex-1 py-1 text-sm"/><button type="button" id="longTerm_editAddPickup" class="btn bg-white border text-xs px-2">+</button><button type="button" id="longTerm_editStampPickup" class="btn bg-green-100 text-green-600 text-xs px-2">今</button></div>
+                 <div id="longTerm_editPickupTags" class="flex flex-wrap gap-1"></div>
+               </div>
+             </div>
+
+             <div class="col-span-2"><textarea id="longTerm_editNotes" name="備註" class="input-field" placeholder="備註"></textarea></div>
+          </div>
+          <div class="flex gap-3 pt-3">
+            <button type="button" id="longTerm_deleteEdit" class="btn bg-red-50 text-red-600 flex-1 py-2">刪除</button>
+            <button type="submit" id="longTerm_saveEdit" class="btn bg-blue-600 text-white flex-[2] py-2">儲存</button>
+          </div>
+          <input type="hidden" id="longTerm_editProductBName" name="客訂商品B" /><input type="hidden" id="longTerm_editProductBSpec" name="B商品規格" /><input type="hidden" id="longTerm_editProductBQty" name="B數量" /><input type="checkbox" id="longTerm_editPaid" name="付清" class="hidden" /><input type="hidden" id="longTerm_editPurchaseHidden" name="採購日期" /><input type="hidden" id="longTerm_editArrivalHidden" name="到貨日期" /><input type="hidden" id="longTerm_editPickupHidden" name="取走日期" /><input type="hidden" id="longTerm_editMissedHidden" name="未接電話日期" /><input type="hidden" id="longTerm_editNotifyHidden" name="通知日期" /><input type="hidden" id="longTerm_editStoreTransfer" name="分店調撥" />
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="blacklist_addModalBackdrop" class="modal-backdrop hidden fixed inset-0 z-[60]">
+    <div class="modal-card w-full max-w-sm m-4">
+      <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-red-50">
+        <h3 class="font-bold text-red-800 text-lg">新增黑名單</h3>
+        <button id="blacklist_closeAddModal" class="text-gray-400 hover:text-gray-600">&times;</button>
+      </div>
+      <div class="p-4">
+        <form id="blacklist_addForm" class="space-y-3">
+           <input name="電話" class="input-field" placeholder="電話 (選填)" />
+           <input name="姓名" class="input-field" placeholder="姓名 (選填)" />
+           <input name="客號" class="input-field" placeholder="客號 (選填)" />
+           <input name="原因" class="input-field" placeholder="原因" required />
+           <input type="hidden" id="blacklist_addStore" name="店別" />
+           <div class="flex justify-end gap-2 pt-2">
+             <button type="button" id="blacklist_cancelAdd" class="btn bg-gray-100 px-4 py-2">取消</button>
+             <button type="submit" class="btn bg-red-600 text-white px-4 py-2">新增</button>
+           </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="blacklist_editModalBackdrop" class="modal-backdrop hidden fixed inset-0 z-[60]">
+    <div class="modal-card w-full max-w-sm m-4">
+      <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-red-50">
+        <h3 class="font-bold text-red-800 text-lg">編輯黑名單</h3>
+        <button id="blacklist_closeEditModal" class="text-gray-400 hover:text-gray-600">&times;</button>
+      </div>
+      <div class="p-4">
+        <form id="blacklist_editForm" class="space-y-3">
+           <input type="hidden" id="blacklist_editRowIndex" name="row" />
+           <input id="bl_edit_phone" name="電話" class="input-field" placeholder="電話" />
+           <input id="bl_edit_name" name="姓名" class="input-field" placeholder="姓名" />
+           <input id="bl_edit_custID" name="客號" class="input-field" placeholder="客號" />
+           <input id="bl_edit_reason" name="原因" class="input-field" placeholder="原因" />
+           <input id="bl_edit_date" name="日期" type="date" class="input-field" />
+           <textarea id="bl_edit_notes" name="備註" class="input-field" placeholder="備註"></textarea>
+           <input type="hidden" id="bl_edit_store" name="店別" />
+           <div class="flex justify-end gap-2 pt-2">
+             <button type="button" id="blacklist_cancelEdit" class="btn bg-gray-100 px-4 py-2">取消</button>
+             <button type="submit" class="btn bg-green-600 text-white px-4 py-2">儲存</button>
+           </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 引入拆分後的 JS 檔案，請注意順序：工具 -> Admin -> 訂單(入口) -->
+  <script src="utils.js"></script>
+  <script src="admin.js"></script>
+  <script src="orders.js"></script>
+
+</body>
+</html>
