@@ -1,19 +1,26 @@
 // ==========================================
 // 1. 初始化與入口 (Init)
 // ==========================================
+
 const editMissedCtrl = setupTagControls(
-    document.getElementById('editAddMissed'), document.getElementById('editStampMissed'), 
-    document.getElementById('editMissedInput'), document.getElementById('editMissedTags'), document.getElementById('editMissedHidden')
+    document.getElementById('editAddMissed'), 
+    document.getElementById('editStampMissed'), 
+    document.getElementById('editMissedInput'), 
+    document.getElementById('editMissedTags'), 
+    document.getElementById('editMissedHidden')
 );
 const editNotifyCtrl = setupTagControls(
-    document.getElementById('editAddNotify'), document.getElementById('editStampNotify'), 
-    document.getElementById('editNotifyInput'), document.getElementById('editNotifyTags'), document.getElementById('editNotifyHidden')
+    document.getElementById('editAddNotify'), 
+    document.getElementById('editStampNotify'), 
+    document.getElementById('editNotifyInput'), 
+    document.getElementById('editNotifyTags'), 
+    document.getElementById('editNotifyHidden')
 );
 
 const editTransferStoreInput = document.getElementById('editTransferStoreInput');
 const editTransferDateInput = document.getElementById('editTransferDateInput');
 const editStoreTransferHidden = document.getElementById('editStoreTransfer');
-const transferStoreSelect = document.getElementById('transferStoreSelect');
+const storeTransferOptionsContainer = document.getElementById('storeTransferOptions');
 const clearStoreTransferBtn = document.getElementById('clearStoreTransfer');
 
 const dataLoader = document.getElementById('dataLoader');
@@ -33,75 +40,48 @@ window.addEventListener('load', async () => {
     renderTabs();
     await fetchStores();
     await fetchOrders(); 
-    if(typeof fetchBlacklistData === 'function') fetchBlacklistData();
+    
+    if(typeof fetchBlacklistData === 'function') {
+        fetchBlacklistData();
+    }
 });
 
 // ==========================================
-// 2. 資料讀取與選單連動 (Fetch & Dropdown)
+// 2. 資料讀取 (Fetch Data)
 // ==========================================
+
 async function fetchStores() {
     try {
         const resp = await fetch(`${SCRIPT_URL}?action=stores`);
         const json = await resp.json();
-        allStoresCache = json.stores || [];
+        const stores = json.stores || [];
+        
+        allStoresCache = stores; 
 
-        const regionSelect = document.getElementById('regionSelect');
-        const regions = [...new Set(allStoresCache.map(s => s.region).filter(Boolean))];
-
-        regionSelect.innerHTML = '<option value="">選擇區域</option>';
-        regions.forEach(r => {
-            if (r === '區域' || r === 'Region') return; 
+        storeSelect.innerHTML = '<option value="">請選擇店別</option>';
+        stores.forEach(s => {
+            if(s.name === '店名' || s.code === '店編號') return;
             const opt = document.createElement('option');
-            opt.value = r; opt.textContent = r;
-            regionSelect.appendChild(opt);
+            opt.value = s.code; 
+            opt.textContent = s.name ? `${s.name}` : s.code;
+            opt.dataset.name = s.name || s.code; 
+            storeSelect.appendChild(opt);
         });
 
-        const savedRegion = localStorage.getItem('selected_region');
-        const savedStore = localStorage.getItem('selected_store');
-
-        if (savedRegion && regions.includes(savedRegion)) {
-            regionSelect.value = savedRegion;
-            updateStoreSelectOptions(savedRegion); 
-            if (savedStore && Array.from(storeSelect.options).some(o => o.value === savedStore)) {
-                storeSelect.value = savedStore; 
-                currentValidStore = savedStore; 
-                updateStoreDisplay(); 
-            }
+        const saved = localStorage.getItem('selected_store');
+        if(saved && Array.from(storeSelect.options).some(o=>o.value===saved)) {
+            storeSelect.value = saved; 
+            currentValidStore = saved; 
+            updateStoreDisplay(); 
         }
-        if(typeof checkStoreSettings === 'function') checkStoreSettings(); 
-    } catch(e) { console.error('Fetch Stores Error:', e); }
+        
+        if(typeof checkStoreSettings === 'function') {
+            checkStoreSettings(); 
+        }
+    } catch(e) { 
+        console.error('Fetch Stores Error:', e); 
+    }
 }
-
-function updateStoreSelectOptions(region) {
-    storeSelect.innerHTML = '<option value="">選擇分店</option>';
-    if (!region) { storeSelect.disabled = true; return; }
-    storeSelect.disabled = false;
-    
-    const filteredStores = allStoresCache.filter(s => s.region === region);
-    filteredStores.forEach(s => {
-        if(s.name === '店名' || s.code === '店編號') return;
-        const opt = document.createElement('option');
-        opt.value = s.code; 
-        opt.textContent = s.name ? `${s.name}` : s.code;
-        opt.dataset.name = s.name || s.code;
-        storeSelect.appendChild(opt);
-    });
-}
-
-document.getElementById('regionSelect').addEventListener('change', () => {
-    const regionSelect = document.getElementById('regionSelect');
-    const region = regionSelect.value;
-    localStorage.setItem('selected_region', region);
-
-    storeSelect.value = '';
-    currentValidStore = '';
-    localStorage.removeItem('selected_store');
-    updateStoreDisplay();
-
-    updateStoreSelectOptions(region);
-    fetchOrders(); 
-    if(typeof renderBlacklistTable === 'function') renderBlacklistTable();
-});
 
 storeSelect.addEventListener('change', async () => {
     const targetStoreCode = storeSelect.value;
@@ -116,28 +96,35 @@ storeSelect.addEventListener('change', async () => {
         return;
     }
 
-    const input = prompt(`您即將切換至：${targetStoreName}\n\n為確保安全性，請輸入該店的【店編號】(英文字母大寫) 或【管理密碼】以確認：`);
-    if (!input) { storeSelect.value = currentValidStore; return; }
+    const input = prompt(`您即將切換至：${targetStoreName}\n\n為確保安全性，請輸入該店的【店編號】(英文字母需大寫)以確認切換：`);
+
+    if (!input) {
+        storeSelect.value = currentValidStore; 
+        return;
+    }
 
     let isVerified = false;
-    const targetStoreData = allStoresCache.find(s => s.code === targetStoreCode);
-    const managerId = targetStoreData ? targetStoreData.manager : '';
 
-    if (input.trim().toUpperCase() === targetStoreCode.toUpperCase() || (managerId && input.trim() === managerId)) {
+    if (input.trim() === targetStoreCode) {
         isVerified = true;
     } else {
         const isAdmin = await verifyAdminPassword(input.trim());
-        if (isAdmin) isVerified = true;
+        if (isAdmin) {
+            isVerified = true;
+        }
     }
 
     if (isVerified) {
         currentValidStore = targetStoreCode;
         localStorage.setItem('selected_store', targetStoreCode);
         updateStoreDisplay();
-        if(typeof checkStoreSettings === 'function') checkStoreSettings();
+        
+        if(typeof checkStoreSettings === 'function') {
+            checkStoreSettings();
+        }
         fetchOrders();
     } else {
-        alert('驗證失敗 (店號/區經理代號/管理員密碼錯誤)，還原至上一個店別。');
+        alert('驗證失敗 (店號錯誤或管理員密碼錯誤)，還原至上一個店別。');
         storeSelect.value = currentValidStore; 
     }
 });
@@ -156,28 +143,49 @@ async function fetchOrders() {
         const json = await resp.json();
         const rows = json.rows || [];
         
-        allOrders = []; allLongTermOrders = [];
+        allOrders = []; 
+        allLongTermOrders = [];
+        
         rows.forEach(r => {
-            if(r['固定/長期客訂'] === '是' || r['固定/長期客訂'] === true) allLongTermOrders.push(r);
-            else allOrders.push(r);
+            if(r['固定/長期客訂'] === '是' || r['固定/長期客訂'] === true) {
+                allLongTermOrders.push(r);
+            } else {
+                allOrders.push(r);
+            }
         });
         
-        renderTableHeaders(['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新']);
-        if(typeof renderLongTermTableHeaders === 'function') renderLongTermTableHeaders(['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新']);
+        const fixedHeaders = ['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新'];
+        renderTableHeaders(fixedHeaders);
+        
+        const longTermHeaders = ['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新'];
+        if(typeof renderLongTermTableHeaders === 'function') {
+            renderLongTermTableHeaders(longTermHeaders);
+        }
+
         renderTable(); 
-        if(typeof renderLongTermTable === 'function') renderLongTermTable();
+        
+        if(typeof renderLongTermTable === 'function') {
+            renderLongTermTable();
+        }
+
     } catch(e) { 
-        dataMessageBox.classList.remove('hidden'); dataMessageBox.textContent = '讀取失敗：' + e.message;
-    } finally { dataLoader.classList.add('hidden'); }
+        console.error(e); 
+        dataMessageBox.classList.remove('hidden');
+        dataMessageBox.textContent = '讀取失敗：' + e.message;
+    } finally { 
+        dataLoader.classList.add('hidden'); 
+    }
 }
 
 // ==========================================
 // 3. 表格渲染 (Render UI)
 // ==========================================
+
 function renderTableHeaders(displayHeaders){
     if(!dataTableHeaders) return;
     dataTableHeaders.innerHTML = '';
-    ['狀態', ...displayHeaders].forEach(h=>{
+    const headers = ['狀態', ...displayHeaders];
+    headers.forEach(h=>{
       const th = document.createElement('th');
       th.className = 'sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap'; 
       th.textContent = h;
@@ -197,31 +205,52 @@ function renderTable() {
         return Object.values(o).some(val => String(val).toLowerCase().includes(term));
     });
 
-    filtered.sort((a,b) => new Date(b['最後更新時間']||b['建立日期']||0).getTime() - new Date(a['最後更新時間']||a['建立日期']||0).getTime());
+    filtered.sort((a,b) => {
+         const ta = new Date(a['最後更新時間'] || a['建立日期'] || 0).getTime();
+         const tb = new Date(b['最後更新時間'] || b['建立日期'] || 0).getTime();
+         return tb - ta;
+    });
     
     if(filtered.length === 0) { 
-        noDataText.classList.remove('hidden'); tableContainer.classList.add('hidden'); return; 
+        noDataText.classList.remove('hidden'); 
+        tableContainer.classList.add('hidden'); 
+        return; 
     } else { 
-        noDataText.classList.add('hidden'); tableContainer.classList.remove('hidden'); 
+        noDataText.classList.add('hidden'); 
+        tableContainer.classList.remove('hidden'); 
     }
 
     filtered.forEach(order => {
         const tr = document.createElement('tr');
         const isLineNotify = isChecked(order['Line通知']);
-        tr.className = isLineNotify ? 'bg-green-100 hover:bg-green-200 cursor-pointer transition-colors border-l-4 border-green-400' : 'bg-white even:bg-gray-50 hover:bg-indigo-50 cursor-pointer transition-colors';
-        tr.onclick = (e) => { if(!e.target.closest('button')) openEditModal(order); };
+        if (isLineNotify) {
+            tr.className = 'bg-green-100 hover:bg-green-200 cursor-pointer transition-colors border-l-4 border-green-400';
+        } else {
+            tr.className = 'bg-white even:bg-gray-50 hover:bg-indigo-50 cursor-pointer transition-colors';
+        }
+
+        tr.onclick = (e) => { 
+            if(e.target.closest('button')) return; 
+            openEditModal(order); 
+        };
 
         const status = getStatus(order);
+        
         const productA = order['客訂商品A'] ? `[${order['客訂商品A']}]${order['A商品規格'] ? `(${order['A商品規格']})` : ''} ${order['A數量'] ? 'x' + order['A數量'] : ''}` : '';
         const productB = order['客訂商品B'] ? `[${order['客訂商品B']}]${order['B商品規格'] ? `(${order['B商品規格']})` : ''} ${order['B數量'] ? 'x' + order['B數量'] : ''}` : '';
         
         let transferDisplay = '';
         if (order['分店調撥'] && order['分店調撥'].trim()) {
-             let displayTxt = order['分店調撥'].trim().replace('⇄', '').trim();
+             const val = order['分店調撥'].trim();
+             let displayTxt = val.replace('⇄', '').trim();
              const parts = displayTxt.split(/\s+/);
              if (parts.length > 1) {
-                 const formattedDate = formatDateMMDD(parts[parts.length-1]);
-                 if (formattedDate) { parts[parts.length-1] = formattedDate; displayTxt = parts.join(' '); }
+                 const datePart = parts[parts.length-1];
+                 const formattedDate = formatDateMMDD(datePart); 
+                 if (formattedDate) {
+                    parts[parts.length-1] = formattedDate;
+                    displayTxt = parts.join(' ');
+                 }
              }
              transferDisplay = `<div class="mt-1 inline-flex items-center gap-1 border border-purple-300 text-purple-700 bg-purple-50 rounded px-2 py-0.5 text-xs"><span>⇄ ${displayTxt}</span></div>`;
         }
@@ -232,7 +261,8 @@ function renderTable() {
             if(parts.length === 0) return '';
             return parts.map(d => {
                 const dobj = new Date(d);
-                return isNaN(dobj.getTime()) ? d : `${pad(dobj.getMonth()+1)}/${pad(dobj.getDate())}`;
+                if(isNaN(dobj.getTime())) return d;
+                return `${pad(dobj.getMonth()+1)}/${pad(dobj.getDate())}`;
             }).join(', ');
         };
 
@@ -244,8 +274,14 @@ function renderTable() {
         if(order['取走日期']) dateDisplay += `<div class="text-xs text-green-600">取走: ${formatDateMMDD(order['取走日期'])}</div>`;
         if(!dateDisplay) dateDisplay = `<div class="text-xs text-gray-400">${formatDateMMDD(order['建立日期'])}</div>`;
 
-        let phoneDisplay = formatPhone(order['電話'] || order['連絡電話'] || '');
-        const paidDisplay = isChecked(order['付清'] || order['paid']) ? '<span class="text-green-600 font-bold">是</span>' : '<span class="text-gray-400">否</span>';
+        let phoneDisplay = order['電話'] || order['連絡電話'] || '';
+        if (phoneDisplay) phoneDisplay = formatPhone(phoneDisplay);
+
+        const isPaid = isChecked(order['付清'] || order['paid']);
+        const paidDisplay = isPaid ? '<span class="text-green-600 font-bold">是</span>' : '<span class="text-gray-400">否</span>';
+        
+        const createdDate = formatDateMMDD(order['建立日期'] || order['creationDate'] || order['建立時間']);
+        const updatedDate = formatDateMMDD(order['最後更新時間']);
 
         tr.innerHTML = `
           <td><span class="status-badge ${status.class}">${status.label}</span></td>
@@ -258,24 +294,39 @@ function renderTable() {
           </td>
           <td data-label="進度" class="text-gray-500">${dateDisplay || '-'}</td>
           <td data-label="付清">${paidDisplay}</td>
-          <td data-label="建立日期" class="text-xs text-gray-400">${formatDateMMDD(order['建立日期'] || order['建立時間'])}</td>
-          <td data-label="最後更新" class="text-xs text-gray-400">${formatDateMMDD(order['最後更新時間'])}</td>
+          <td data-label="建立日期" class="text-xs text-gray-400">${createdDate}</td>
+          <td data-label="最後更新" class="text-xs text-gray-400">${updatedDate}</td>
         `;
+
         dataTableBody.appendChild(tr);
     });
 }
 
 function renderTabs() {
     const STATUS_TABS = [
-      { key: 'all', label: '全部' }, { key: '未處理', label: '未處理' }, { key: '已採購', label: '已採購' },
-      { key: '已到貨', label: '已到貨' }, { key: '已通知', label: '已通知' }, { key: '未接', label: '未接' }, { key: '已取貨', label: '已取貨' }
+      { key: 'all', label: '全部' },
+      { key: '未處理', label: '未處理' },
+      { key: '已採購', label: '已採購' },
+      { key: '已到貨', label: '已到貨' },
+      { key: '已通知', label: '已通知' },
+      { key: '未接', label: '未接' },
+      { key: '已取貨', label: '已取貨' }
     ];
-    document.getElementById('statusTabs').innerHTML = STATUS_TABS.map(tab => `
-      <button class="tab-btn ${tab.key === currentFilter ? 'active' : ''}" onclick="setFilter('${tab.key}')">${tab.label}</button>
+    const container = document.getElementById('statusTabs');
+    container.innerHTML = STATUS_TABS.map(tab => `
+      <button class="tab-btn ${tab.key === currentFilter ? 'active' : ''}" 
+              onclick="setFilter('${tab.key}')">
+        ${tab.label}
+      </button>
     `).join('');
 }
 
-window.setFilter = (key) => { currentFilter = key; renderTabs(); renderTable(); };
+window.setFilter = (key) => { 
+    currentFilter = key; 
+    renderTabs(); 
+    renderTable(); 
+};
+
 searchButton.addEventListener('click', renderTable);
 searchInput.addEventListener('input', renderTable);
 refreshButton.addEventListener('click', fetchOrders);
@@ -283,73 +334,81 @@ refreshButton.addEventListener('click', fetchOrders);
 // ==========================================
 // 4. 新增、編輯與刪除 (CRUD)
 // ==========================================
+
 orderForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const store = storeSelect.value;
     if(!store) { alert('請先選擇店別！'); return; }
-    submitButton.disabled = true; submitButton.textContent = '送出中...';
+    
+    submitButton.disabled = true; 
+    submitButton.textContent = '送出中...';
+    
     try {
       const fd = new FormData(orderForm);
-      fd.append('action', 'append'); fd.append('store', store);
+      fd.append('action', 'append');
+      fd.append('store', store);
       await fetch(SCRIPT_URL, { method: 'POST', body: fd });
-      alert('訂單已送出'); orderForm.reset(); fetchOrders();
+      alert('訂單已送出'); 
+      orderForm.reset(); 
+      fetchOrders();
     } catch(err) { alert('失敗: '+err.message); } finally { submitButton.disabled = false; submitButton.textContent = '送出訂單'; }
 });
 
-document.getElementById('phone').addEventListener('input', function() {
-    const inputNoZero = this.value.trim().replace(/\D/g, '').replace(/^0+/, ''); 
-    const phoneWarning = document.getElementById('phone-warning');
+const phoneInput = document.getElementById('phone');
+const phoneWarning = document.getElementById('phone-warning');
+
+phoneInput.addEventListener('input', function() {
+    const inputVal = this.value.trim().replace(/\D/g, ''); 
+    const inputNoZero = inputVal.replace(/^0+/, ''); 
+    
     phoneWarning.classList.add('hidden');
-    this.style.borderColor = ''; this.style.backgroundColor = '';
+    this.style.borderColor = ''; 
+    this.style.backgroundColor = '';
     
     if (inputNoZero.length < 6) return;
     
     const found = allBlacklistData.find(row => {
-        const rawPhone = resolveBlacklistRowData(row).phone;
+        const data = resolveBlacklistRowData(row);
+        const rawPhone = data.phone;
         const rowPhoneNoZero = String(rawPhone).replace(/\D/g, '').replace(/^0+/, '');
         return rowPhoneNoZero && rowPhoneNoZero === inputNoZero;
     });
 
     if (found) {
+         const data = resolveBlacklistRowData(found);
          phoneWarning.classList.remove('hidden');
-         phoneWarning.textContent = `⚠️ 此號碼在黑名單中！(${resolveBlacklistRowData(found).reason})`;
-         this.style.borderColor = 'red'; this.style.backgroundColor = '#fef2f2';
+         phoneWarning.textContent = `⚠️ 此號碼在黑名單中！(${data.reason})`;
+         this.style.borderColor = 'red'; 
+         this.style.backgroundColor = '#fef2f2';
     }
 });
 
 function setupStoreTransferUI() {
     const currentStoreName = getSelectedStoreName();
-    if(!transferStoreSelect) return;
-    transferStoreSelect.innerHTML = '<option value="">請選擇調撥分店 (依區域分類)</option>';
-
-    const regions = [...new Set(allStoresCache.map(s => s.region).filter(Boolean))];
-    regions.forEach(region => {
-        const optgroup = document.createElement('optgroup'); optgroup.label = region;
-        allStoresCache.filter(s => s.region === region).forEach(store => {
-            if (!store.name || store.name === '店名' || store.name === currentStoreName) return;
-            const opt = document.createElement('option');
-            opt.value = store.name; opt.textContent = store.name;
-            optgroup.appendChild(opt);
-        });
-        if(optgroup.children.length > 0) transferStoreSelect.appendChild(optgroup);
+    storeTransferOptionsContainer.innerHTML = '';
+    allStoresCache.forEach(store => {
+        if (!store.name || store.name === '店名' || store.name === currentStoreName) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn bg-white border border-gray-200 text-gray-600 text-xs px-2 py-1 hover:bg-gray-50';
+        btn.textContent = `⇄ ${store.name}`;
+        btn.onclick = () => { editTransferStoreInput.value = store.name; };
+        storeTransferOptionsContainer.appendChild(btn);
     });
-    transferStoreSelect.onchange = () => {
-        if(transferStoreSelect.value) {
-            editTransferStoreInput.value = transferStoreSelect.value;
-            transferStoreSelect.value = ''; 
-        }
-    };
 }
 
 clearStoreTransferBtn.addEventListener('click', () => {
-    editTransferStoreInput.value = ''; editTransferDateInput.value = ''; editStoreTransferHidden.value = '';
+    editTransferStoreInput.value = '';
+    editTransferDateInput.value = '';
+    editStoreTransferHidden.value = '';
 });
 
 function openEditModal(order) {
     document.getElementById('editRowIndex').value = order['__row'];
     document.getElementById('editCustomerID').value = order['客號']||'';
     document.getElementById('editCustomerName').value = order['姓名']||'';
-    document.getElementById('editPhone').value = order['電話']||order['連絡電話']||'';
+    // 【重點修正】讓編輯視窗裡的電話也套用自動補 0 邏輯
+    document.getElementById('editPhone').value = formatPhone(order['電話']||order['連絡電話']);
     document.getElementById('editProductAName').value = order['客訂商品A']||'';
     document.getElementById('editProductASpec').value = order['A商品規格']||'';
     document.getElementById('editProductAQty').value = order['A數量']||'';
@@ -366,25 +425,35 @@ function openEditModal(order) {
     setInputDate('editPickupDate', order['取走日期']);
     
     setupStoreTransferUI();
+    
     const transferVal = order['分店調撥'] || '';
     editStoreTransferHidden.value = transferVal;
-    editTransferStoreInput.value = ''; editTransferDateInput.value = '';
+    editTransferStoreInput.value = '';
+    editTransferDateInput.value = '';
     
     if (transferVal && transferVal.includes('⇄')) {
-        const parts = transferVal.replace('⇄', '').trim().split(/\s+/);
+        const content = transferVal.replace('⇄', '').trim();
+        const parts = content.split(/\s+/);
         if (parts.length >= 2) {
             const dateStr = parts.pop();
-            editTransferStoreInput.value = parts.join(' ');
+            const storeName = parts.join(' ');
+            editTransferStoreInput.value = storeName;
             const d = new Date(dateStr);
-            if (!isNaN(d.getTime())) editTransferDateInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; 
+            if (!isNaN(d.getTime())) {
+                editTransferDateInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; 
+            }
         } else {
-             editTransferStoreInput.value = parts.join('');
+             editTransferStoreInput.value = content;
         }
     }
+
     try {
-      editMissedCtrl.setItems(parseMultiDateStringToArray(order['未接電話日期']));
-      editNotifyCtrl.setItems(parseMultiDateStringToArray(order['通知日期']));
+      const missed = parseMultiDateStringToArray(order['未接電話日期']);
+      const notify = parseMultiDateStringToArray(order['通知日期']);
+      editMissedCtrl.setItems(missed);
+      editNotifyCtrl.setItems(notify);
     } catch(e) { console.warn(e); }
+
     editModal.classList.remove('hidden');
 }
 
@@ -392,24 +461,35 @@ document.getElementById('editForm').addEventListener('submit', async(e)=>{
     e.preventDefault(); 
     const tStore = editTransferStoreInput.value.trim();
     const tDate = editTransferDateInput.value;
-    editStoreTransferHidden.value = tStore ? `⇄ ${tStore} ${tDate}` : ''; 
+    if (tStore) {
+        editStoreTransferHidden.value = `⇄ ${tStore} ${tDate}`; 
+    } else {
+        editStoreTransferHidden.value = '';
+    }
     const fd = new FormData(e.target); 
-    fd.append('action','update'); fd.append('store', storeSelect.value); 
+    fd.append('action','update'); 
+    fd.append('store', storeSelect.value); 
     try {
         await fetch(SCRIPT_URL, { method: 'POST', body: fd }); 
-        alert('更新成功'); editModal.classList.add('hidden'); fetchOrders(); 
+        alert('更新成功'); 
+        editModal.classList.add('hidden'); 
+        fetchOrders(); 
     } catch(err) { alert('更新失敗: ' + err.message); }
 });
 
 document.getElementById('deleteEdit').addEventListener('click', () => { 
-    if(confirm('確定要刪除這筆訂單嗎？')) deleteRow(document.getElementById('editRowIndex').value); 
+    if(confirm('確定要刪除這筆訂單嗎？')) { deleteRow(document.getElementById('editRowIndex').value); }
 });
 
 async function deleteRow(idx) { 
-    const fd = new FormData(); fd.append('action', 'delete'); fd.append('row', idx); fd.append('store', storeSelect.value); 
+    const fd = new FormData(); 
+    fd.append('action', 'delete'); 
+    fd.append('row', idx); 
+    fd.append('store', storeSelect.value); 
     try {
         await fetch(SCRIPT_URL, { method: 'POST', body: fd }); 
-        alert('已刪除'); editModal.classList.add('hidden'); 
+        alert('已刪除'); 
+        editModal.classList.add('hidden'); 
         const ltModal = document.getElementById('longTerm_editModalBackdrop');
         if(ltModal) ltModal.classList.add('hidden');
         fetchOrders(); 
@@ -431,8 +511,11 @@ const historyLoader = document.getElementById('historyLoader');
 document.getElementById('searchHistoryBtn').addEventListener('click', () => {
     const store = storeSelect.value;
     if (!store) { alert('請先選擇分店才能查詢該店的歷史資料'); return; }
-    historySearchInput.value = ''; historyTableBody.innerHTML = ''; historyTableHeaders.innerHTML = '';
-    historyNoData.textContent = '請輸入關鍵字進行搜尋'; historyNoData.classList.remove('hidden');
+    historySearchInput.value = '';
+    historyTableBody.innerHTML = '';
+    historyTableHeaders.innerHTML = '';
+    historyNoData.textContent = '請輸入關鍵字進行搜尋';
+    historyNoData.classList.remove('hidden');
     historyModalBackdrop.classList.remove('hidden');
 });
 
@@ -442,23 +525,36 @@ historySearchInput.addEventListener('keydown', (e) => { if(e.key==='Enter') perf
 
 async function performHistorySearch() {
     const store = storeSelect.value;
-    const term = historySearchInput.value.trim().toLowerCase();
+    const term = historySearchInput.value.trim();
     if (!term) { alert('請輸入搜尋關鍵字 (例如姓名、電話或商品名稱)'); return; }
     
     historyLoader.classList.remove('hidden');
-    historyTableBody.innerHTML = ''; historyTableHeaders.innerHTML = ''; historyNoData.classList.add('hidden');
+    historyTableBody.innerHTML = '';
+    historyTableHeaders.innerHTML = ''; 
+    historyNoData.classList.add('hidden');
     
     try {
-        const resp = await fetch(`${SCRIPT_URL}?action=search_history&store=${encodeURIComponent(store)}&term=${encodeURIComponent(term)}`);
+        const url = `${SCRIPT_URL}?action=search_history&store=${encodeURIComponent(store)}&term=${encodeURIComponent(term)}`;
+        const resp = await fetch(url);
         const json = await resp.json();
         
         if(json.result === 'success') {
             let rows = json.rows || [];
-            if (term) rows = rows.filter(r => Object.entries(r).some(([key, val]) => key !== '__row' && String(val).toLowerCase().includes(term)));
+            const headers = json.headers || [];
+            if (term) {
+                const lowerTerm = term.toLowerCase();
+                rows = rows.filter(r => {
+                    return Object.entries(r).some(([key, val]) => {
+                        if (key === '__row') return false;
+                        return String(val).toLowerCase().includes(lowerTerm);
+                    });
+                });
+            }
             if(rows.length === 0) {
-                historyNoData.textContent = '查無符合資料'; historyNoData.classList.remove('hidden');
+                historyNoData.textContent = '查無符合資料';
+                historyNoData.classList.remove('hidden');
             } else {
-                renderHistoryTable(json.headers || [], rows);
+                renderHistoryTable(headers, rows);
             }
         } else { alert('查詢失敗：' + json.error); }
     } catch(e) { console.error(e); alert('查詢錯誤'); } finally { historyLoader.classList.add('hidden'); }
@@ -469,22 +565,30 @@ function renderHistoryTable(headers, rows) {
     const displayCols = ['歸檔日期', '客號', '姓名', '電話', '連絡電話', '客訂商品A', '商品', '取走日期', '備註'];
     const colNames = [];
     headers.forEach(h => {
-        if(displayCols.some(k => h.includes(k)) || h.includes('Date') || h.includes('日期')) { 
+        const shouldShow = displayCols.some(k => h.includes(k)) || h.includes('Date') || h.includes('日期');
+        if(shouldShow) { 
             const th = document.createElement('th');
-            th.textContent = h; th.className = "sticky top-0 bg-gray-100 px-4 py-2 border-b font-bold whitespace-nowrap";
-            historyTableHeaders.appendChild(th); colNames.push(h);
+            th.textContent = h;
+            th.className = "sticky top-0 bg-gray-100 px-4 py-2 border-b font-bold whitespace-nowrap";
+            historyTableHeaders.appendChild(th);
+            colNames.push(h);
         }
     });
     rows.forEach(row => {
-        const tr = document.createElement('tr'); tr.className = "hover:bg-gray-50 border-b";
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-gray-50 border-b";
         colNames.forEach(key => {
-            const td = document.createElement('td'); td.className = "px-4 py-2 whitespace-nowrap text-sm";
+            const td = document.createElement('td');
+            td.className = "px-4 py-2 whitespace-nowrap text-sm";
             let val = row[key]; 
-            if(typeof val === 'string' && val.includes('T') && val.includes(':')) val = val.split('T')[0];
-            td.textContent = (val !== undefined && val !== null) ? val : '-';
+            if(typeof val === 'string' && val.includes('T') && val.includes(':')) { val = val.split('T')[0]; }
+            
+            // 【重點修正】歷史訂單列表裡的電話也要格式化
+            if(key === '電話' || key === '連絡電話') val = formatPhone(val);
+            
+            td.textContent = (val !== undefined && val !== null && val !== '') ? val : '-';
             tr.appendChild(td);
         });
         historyTableBody.appendChild(tr);
     });
 }
-
