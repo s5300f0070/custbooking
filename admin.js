@@ -609,13 +609,13 @@ let dashCurrentSort = { key: 'total', asc: false };
 
 if(openDashboardBtn) {
     openDashboardBtn.addEventListener('click', async () => {
-        const pwd = prompt('請輸入「區經理代號」或「總管理員密碼」以進入儀表板：');
+        // 修改提示文字以符合單店密碼查詢需求
+        const pwd = prompt('請輸入該店密碼或者管理密碼');
         if(!pwd) return;
 
         dashboardModal.classList.remove('hidden'); dashLoader.classList.remove('hidden');
 
         try {
-            // 已將 POST 修正為 GET，解決「未知動作」的錯誤
             const url = `${SCRIPT_URL}?action=dashboard&password=${encodeURIComponent(pwd.trim())}`;
             const resp = await fetch(url);
             const json = await resp.json();
@@ -626,7 +626,14 @@ if(openDashboardBtn) {
             dashStoreNames = json.storeNames || {};
             dashStoreRegions = json.storeRegions || {};
             
-            document.getElementById('dashTitle').textContent = `營運總覽 - ${json.region}`;
+            // 判斷登入身分：單店模式、區經理、或全台總覽
+            if (json.role === 'store') {
+                const sName = dashStoreNames[json.storeCode] || json.storeCode;
+                document.getElementById('dashTitle').textContent = `營運總覽 - ${sName}`;
+            } else {
+                document.getElementById('dashTitle').textContent = `營運總覽 - ${json.region}`;
+            }
+            
             document.getElementById('stat-blacklist').textContent = json.blacklistCount || 0;
 
             if(json.role === 'admin') {
