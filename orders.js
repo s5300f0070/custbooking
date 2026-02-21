@@ -17,10 +17,11 @@ const editNotifyCtrl = setupTagControls(
     document.getElementById('editNotifyHidden')
 );
 
+// 【已修復】分店調撥控制項 (替換為下拉選單變數)
 const editTransferStoreInput = document.getElementById('editTransferStoreInput');
 const editTransferDateInput = document.getElementById('editTransferDateInput');
 const editStoreTransferHidden = document.getElementById('editStoreTransfer');
-const storeTransferOptionsContainer = document.getElementById('storeTransferOptions');
+const transferStoreSelect = document.getElementById('transferStoreSelect');
 const clearStoreTransferBtn = document.getElementById('clearStoreTransfer');
 
 const dataLoader = document.getElementById('dataLoader');
@@ -383,18 +384,33 @@ phoneInput.addEventListener('input', function() {
     }
 });
 
+// 【已修復】分店調撥 UI 生成 (改為下拉選單)
 function setupStoreTransferUI() {
     const currentStoreName = getSelectedStoreName();
-    storeTransferOptionsContainer.innerHTML = '';
-    allStoresCache.forEach(store => {
-        if (!store.name || store.name === '店名' || store.name === currentStoreName) return;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn bg-white border border-gray-200 text-gray-600 text-xs px-2 py-1 hover:bg-gray-50';
-        btn.textContent = `⇄ ${store.name}`;
-        btn.onclick = () => { editTransferStoreInput.value = store.name; };
-        storeTransferOptionsContainer.appendChild(btn);
+    if(!transferStoreSelect) return;
+    
+    transferStoreSelect.innerHTML = '<option value="">請選擇調撥分店 (依區域分類)</option>';
+
+    const regions = [...new Set(allStoresCache.map(s => s.region).filter(Boolean))];
+    regions.forEach(region => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = region;
+        allStoresCache.filter(s => s.region === region).forEach(store => {
+            if (!store.name || store.name === '店名' || store.name === currentStoreName) return;
+            const opt = document.createElement('option');
+            opt.value = store.name;
+            opt.textContent = store.name;
+            optgroup.appendChild(opt);
+        });
+        if(optgroup.children.length > 0) transferStoreSelect.appendChild(optgroup);
     });
+
+    transferStoreSelect.onchange = () => {
+        if(transferStoreSelect.value) {
+            editTransferStoreInput.value = transferStoreSelect.value;
+            transferStoreSelect.value = ''; 
+        }
+    };
 }
 
 clearStoreTransferBtn.addEventListener('click', () => {
@@ -407,7 +423,7 @@ function openEditModal(order) {
     document.getElementById('editRowIndex').value = order['__row'];
     document.getElementById('editCustomerID').value = order['客號']||'';
     document.getElementById('editCustomerName').value = order['姓名']||'';
-    // 【重點修正】讓編輯視窗裡的電話也套用自動補 0 邏輯
+    // 電話套用自動補 0
     document.getElementById('editPhone').value = formatPhone(order['電話']||order['連絡電話']);
     document.getElementById('editProductAName').value = order['客訂商品A']||'';
     document.getElementById('editProductASpec').value = order['A商品規格']||'';
@@ -583,7 +599,7 @@ function renderHistoryTable(headers, rows) {
             let val = row[key]; 
             if(typeof val === 'string' && val.includes('T') && val.includes(':')) { val = val.split('T')[0]; }
             
-            // 【重點修正】歷史訂單列表裡的電話也要格式化
+            // 歷史訂單列表裡的電話也要格式化
             if(key === '電話' || key === '連絡電話') val = formatPhone(val);
             
             td.textContent = (val !== undefined && val !== null && val !== '') ? val : '-';
