@@ -656,11 +656,13 @@ if(dashRegionFilter) dashRegionFilter.addEventListener('change', renderDashboard
 
 function isOrderOverdue(order, statusKey) {
     if(statusKey === '已取貨') return false;
-    const createDateStr = order['建立日期'] || order['creationDate'] || order['建立時間'];
-    if(!createDateStr) return false;
-    const d = new Date(createDateStr);
+    // 改為判斷「最後更新時間」，若尚未更新過則使用「建立日期」
+    const targetDateStr = order['最後更新時間'] || order['建立日期'] || order['creationDate'] || order['建立時間'];
+    if(!targetDateStr) return false;
+    const d = new Date(targetDateStr);
     if(isNaN(d.getTime())) return false;
-    return ((new Date() - d) / (1000 * 60 * 60 * 24)) > 7; 
+    // 計算與今天的差距是否大於 5 天
+    return ((new Date() - d) / (1000 * 60 * 60 * 24)) > 5; 
 }
 
 function renderDashboard() {
