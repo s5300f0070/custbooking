@@ -116,7 +116,7 @@ storeSelect.addEventListener('change', async () => {
         return;
     }
 
-    const input = prompt(`您即將切換至：${targetStoreName}\n\n為確保安全性，請輸入該店的【店編號】(英文字母大寫) 或【區經理代號】以確認：`);
+    const input = prompt(`您即將切換至：${targetStoreName}\n\n為確保安全性，請輸入該店的【店編號】(英文字母大寫) 或【管理密碼】以確認：`);
     if (!input) { storeSelect.value = currentValidStore; return; }
 
     let isVerified = false;
@@ -487,3 +487,4 @@ function renderHistoryTable(headers, rows) {
         historyTableBody.appendChild(tr);
     });
 }
+
