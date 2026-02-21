@@ -465,6 +465,10 @@ const confirmBackupBtn = document.getElementById('confirmBackupBtn');
 
 // 重整分店
 document.getElementById('refreshStoresBtn').addEventListener('click', async()=>{ 
+    const fd = new FormData();
+    fd.append('action','create_store_sheets');
+    await fetch(SCRIPT_URL,{method:'POST',body:fd}); 
+    // 調用 orders.js 的 fetchStores
     if(typeof fetchStores === 'function') await fetchStores(); 
 });
 
@@ -548,14 +552,30 @@ document.getElementById('clearOverdueBtn').addEventListener('click', async () =>
     }
     if (!confirm('確定要整理此分店的過期資料嗎？\n\n規則：\n1. 已取走且超過 5 天的資料 -> 移至歷史資料庫並刪除。\n2. 未完成的訂單不會被刪除。')) return;
     
+    // 【新增】要求輸入管理員密碼
+    const pwd = prompt('請輸入管理員密碼以執行清除逾期資料：');
+    if (!pwd) return;
+
     const btn = document.getElementById('clearOverdueBtn');
     btn.disabled = true;
+    btn.textContent = '驗證中...';
+
+    // 【新增】先驗證密碼是否正確
+    const isVerified = await verifyAdminPassword(pwd);
+    if (!isVerified) {
+        alert('密碼錯誤，已取消操作。');
+        btn.disabled = false;
+        btn.textContent = '清除逾期';
+        return;
+    }
+
     btn.textContent = '整理中...';
     try {
-        const storeName = getSelectedStoreName();
         const fd = new FormData();
         fd.append('action', 'clean_overdue');
-        fd.append('store', storeSelect.value); // 這裡改傳 store code, 確保與後端過濾邏輯一致
+        fd.append('store', store); // 修正：傳遞 store code，確保與後端過濾邏輯一致
+        fd.append('password', pwd); // 【新增】將密碼傳送給後端
+
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
         const json = await resp.json();
         if (json.result === 'success') {
