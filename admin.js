@@ -111,7 +111,8 @@ function openLongTermEditModal(order) {
     document.getElementById('longTerm_editRowIndex').value = order['__row'];
     document.getElementById('longTerm_editCustomerID').value = order['客號']||'';
     document.getElementById('longTerm_editCustomerName').value = order['姓名']||'';
-    document.getElementById('longTerm_editPhone').value = order['電話']||order['連絡電話']||'';
+    // 【重點修正】讓編輯視窗裡的電話也套用自動補 0 邏輯
+    document.getElementById('longTerm_editPhone').value = formatPhone(order['電話']||order['連絡電話']);
     document.getElementById('longTerm_editProductAName').value = order['客訂商品A']||'';
     document.getElementById('longTerm_editProductASpec').value = order['A商品規格']||'';
     document.getElementById('longTerm_editProductAQty').value = order['A數量']||'';
@@ -251,7 +252,8 @@ function renderBlacklistTable() {
 function openBlacklistEditModal(row) {
     document.getElementById('blacklist_editRowIndex').value = row['__row'];
     const data = resolveBlacklistRowData(row);
-    document.getElementById('bl_edit_phone').value = data.phone;
+    // 【重點修正】讓編輯視窗裡的電話也套用自動補 0 邏輯
+    document.getElementById('bl_edit_phone').value = formatPhone(data.phone);
     document.getElementById('bl_edit_name').value = data.name;
     document.getElementById('bl_edit_custID').value = data.id;
     document.getElementById('bl_edit_reason').value = data.reason;
@@ -525,6 +527,7 @@ confirmBackupBtn.addEventListener('click', async () => {
         const params = new URLSearchParams();
         params.append('action', 'backup_database');
         if(store) params.append('store', storeName);
+        // 可選：將密碼再次傳送以供後端二次驗證(視後端實作而定)
         params.append('password', pwd); 
         
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: params });
@@ -571,9 +574,10 @@ document.getElementById('clearOverdueBtn').addEventListener('click', async () =>
 
     btn.textContent = '整理中...';
     try {
+        const storeName = getSelectedStoreName();
         const fd = new FormData();
         fd.append('action', 'clean_overdue');
-        fd.append('store', store); // 修正：傳遞 store code，確保與後端過濾邏輯一致
+        fd.append('store', storeSelect.value); // 修正：傳遞 store code，確保與後端過濾邏輯一致
         fd.append('password', pwd); // 【新增】將密碼傳送給後端
 
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
@@ -656,12 +660,10 @@ if(dashRegionFilter) dashRegionFilter.addEventListener('change', renderDashboard
 
 function isOrderOverdue(order, statusKey) {
     if(statusKey === '已取貨') return false;
-    // 改為判斷「最後更新時間」，若尚未更新過則使用「建立日期」
-    const targetDateStr = order['最後更新時間'] || order['建立日期'] || order['creationDate'] || order['建立時間'];
-    if(!targetDateStr) return false;
-    const d = new Date(targetDateStr);
+    const createDateStr = order['最後更新時間'] || order['建立日期'] || order['creationDate'] || order['建立時間'];
+    if(!createDateStr) return false;
+    const d = new Date(createDateStr);
     if(isNaN(d.getTime())) return false;
-    // 計算與今天的差距是否大於 5 天
     return ((new Date() - d) / (1000 * 60 * 60 * 24)) > 5; 
 }
 
