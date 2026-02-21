@@ -183,7 +183,22 @@ function renderBlacklistTable() {
     const tableContainer = document.getElementById('blacklist_dataTableContainer');
     const term = document.getElementById('blacklist_searchInput').value.trim().toLowerCase();
     
+    // 過濾目前選擇的區域
+    const currentRegion = document.getElementById('regionSelect') ? document.getElementById('regionSelect').value : '';
+    
     const filtered = allBlacklistData.filter(row => {
+        const data = resolveBlacklistRowData(row);
+        let rowRegion = row['區域'] || row['Region'] || '';
+        
+        // 舊資料若無區域，反查分店資料快取
+        if (!rowRegion && data.store && allStoresCache && allStoresCache.length > 0) {
+            const match = allStoresCache.find(s => s.name === data.store || s.code === data.store);
+            if (match) rowRegion = match.region;
+        }
+
+        // 過濾非本區域的資料
+        if (currentRegion && rowRegion !== currentRegion) return false;
+
         if(!term) return true;
         return Object.values(row).some(val => String(val).toLowerCase().includes(term));
     });
@@ -207,14 +222,20 @@ function renderBlacklistTable() {
         const phoneVal = formatPhone(data.phone);
 
         let displayStoreName = data.store;
+        let rowRegion = row['區域'] || row['Region'] || '';
+
         if (allStoresCache && allStoresCache.length > 0) {
-            const match = allStoresCache.find(s => s.code === data.store);
-            if (match && match.name) displayStoreName = match.name;
+            const match = allStoresCache.find(s => s.code === data.store || s.name === data.store);
+            if (match) {
+                if (match.name) displayStoreName = match.name;
+                if (!rowRegion) rowRegion = match.region;
+            }
         }
 
         tr.innerHTML = `
           <td class="status-badge missed">黑名單</td>
           <td class="text-center"> <button type="button" class="btn bg-red-100 text-red-600 px-2 py-1 text-xs" onclick="event.stopPropagation(); deleteBlacklistRow(${row['__row']})">刪除</button></td>
+          <td data-label="區域" class="font-bold text-gray-700">${rowRegion || '-'}</td>
           <td data-label="客號">${data.id}</td>
           <td data-label="姓名">${data.name}</td>
           <td data-label="電話">${phoneVal}</td>
@@ -286,10 +307,17 @@ document.getElementById('blacklist_addForm').addEventListener('submit', async(e)
         fd.append('targetSheet', 'blacklist');
         const today = todayLocalForInput();
         const currentStore = document.getElementById('blacklist_addStore').value;
+        const currentRegion = document.getElementById('regionSelect') ? document.getElementById('regionSelect').value : '';
+
         fd.append('日期', today);
         fd.append('Date', today);
         fd.append('建立日期', today);
         fd.append('時間', today);
+        
+        if(currentRegion) {
+            fd.append('區域', currentRegion);
+        }
+        
         if(currentStore) {
             fd.append('店別', currentStore);
             fd.append('分店', currentStore);
@@ -437,10 +465,6 @@ const confirmBackupBtn = document.getElementById('confirmBackupBtn');
 
 // 重整分店
 document.getElementById('refreshStoresBtn').addEventListener('click', async()=>{ 
-    const fd = new FormData();
-    fd.append('action','create_store_sheets');
-    await fetch(SCRIPT_URL,{method:'POST',body:fd}); 
-    // 調用 orders.js 的 fetchStores
     if(typeof fetchStores === 'function') await fetchStores(); 
 });
 
@@ -497,7 +521,6 @@ confirmBackupBtn.addEventListener('click', async () => {
         const params = new URLSearchParams();
         params.append('action', 'backup_database');
         if(store) params.append('store', storeName);
-        // 可選：將密碼再次傳送以供後端二次驗證(視後端實作而定)
         params.append('password', pwd); 
         
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: params });
@@ -532,7 +555,7 @@ document.getElementById('clearOverdueBtn').addEventListener('click', async () =>
         const storeName = getSelectedStoreName();
         const fd = new FormData();
         fd.append('action', 'clean_overdue');
-        fd.append('store', storeName); 
+        fd.append('store', storeSelect.value); // 這裡改傳 store code, 確保與後端過濾邏輯一致
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
         const json = await resp.json();
         if (json.result === 'success') {
@@ -547,5 +570,207 @@ document.getElementById('clearOverdueBtn').addEventListener('click', async () =>
         btn.disabled = false;
         btn.textContent = '清除逾期';
     }
-
 });
+
+// ==========================================
+// 5. 營運總覽儀表板 (Dashboard)
+// ==========================================
+const dashboardModal = document.getElementById('dashboardModalBackdrop');
+const openDashboardBtn = document.getElementById('openDashboardBtn');
+const closeDashboardBtn = document.getElementById('closeDashboardBtn');
+const dashLoader = document.getElementById('dashLoader');
+const dashRegionFilter = document.getElementById('dashRegionFilter');
+const dashExportExcel = document.getElementById('dashExportExcel');
+
+let dashRawOrders = [];
+let dashStoreNames = {};
+let dashStoreRegions = {};
+let dashCurrentSort = { key: 'total', asc: false };
+
+if(openDashboardBtn) {
+    openDashboardBtn.addEventListener('click', async () => {
+        const pwd = prompt('請輸入「區經理代號」或「總管理員密碼」以進入儀表板：');
+        if(!pwd) return;
+
+        dashboardModal.classList.remove('hidden'); dashLoader.classList.remove('hidden');
+
+        try {
+            const fd = new FormData(); fd.append('action', 'dashboard'); fd.append('password', pwd.trim());
+            const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if(json.result !== 'success') throw new Error(json.error || '權限驗證失敗');
+
+            dashRawOrders = json.orders || [];
+            dashStoreNames = json.storeNames || {};
+            dashStoreRegions = json.storeRegions || {};
+            
+            document.getElementById('dashTitle').textContent = `營運總覽 - ${json.region}`;
+            document.getElementById('stat-blacklist').textContent = json.blacklistCount || 0;
+
+            if(json.role === 'admin') {
+                const regions = [...new Set(Object.values(dashStoreRegions).filter(Boolean))];
+                dashRegionFilter.innerHTML = '<option value="all">全台總覽</option>';
+                regions.forEach(r => dashRegionFilter.innerHTML += `<option value="${r}">${r}</option>`);
+                dashRegionFilter.classList.remove('hidden');
+            } else {
+                dashRegionFilter.classList.add('hidden');
+            }
+            renderDashboard();
+        } catch (e) {
+            alert('無法載入儀表板：' + e.message); dashboardModal.classList.add('hidden');
+        } finally { dashLoader.classList.add('hidden'); }
+    });
+}
+
+if(closeDashboardBtn) closeDashboardBtn.addEventListener('click', () => dashboardModal.classList.add('hidden'));
+if(dashRegionFilter) dashRegionFilter.addEventListener('change', renderDashboard);
+
+function isOrderOverdue(order, statusKey) {
+    if(statusKey === '已取貨') return false;
+    const createDateStr = order['建立日期'] || order['creationDate'] || order['建立時間'];
+    if(!createDateStr) return false;
+    const d = new Date(createDateStr);
+    if(isNaN(d.getTime())) return false;
+    return ((new Date() - d) / (1000 * 60 * 60 * 24)) > 7; 
+}
+
+function renderDashboard() {
+    const filterRegion = dashRegionFilter.classList.contains('hidden') ? 'all' : dashRegionFilter.value;
+    const orders = dashRawOrders.filter(r => filterRegion === 'all' || dashStoreRegions[String(r['店編號']).trim()] === filterRegion);
+
+    let pending = 0, purchased = 0, arrived = 0, overdue = 0, today = 0;
+    const storeStats = {};
+    const productCounts = {};
+    const todayMMDD = formatDateMMDD(new Date());
+
+    orders.forEach(o => {
+        if (o['固定/長期客訂'] === '是' || o['固定/長期客訂'] === true) return;
+
+        const status = getStatus(o); 
+        const isOverdue = isOrderOverdue(o, status.key);
+
+        if(status.key === '未處理') pending++;
+        if(status.key === '已採購') purchased++;
+        if(status.key === '已到貨') arrived++;
+        if(isOverdue) overdue++;
+        if(formatDateMMDD(o['建立日期'] || o['建立時間']) === todayMMDD) today++;
+
+        const storeCode = String(o['店編號']).trim();
+        if(!storeStats[storeCode]) storeStats[storeCode] = { name: dashStoreNames[storeCode] || storeCode, total: 0, pending: 0, overdue: 0, code: storeCode };
+        
+        storeStats[storeCode].total++;
+        if(status.key === '未處理') storeStats[storeCode].pending++;
+        if(isOverdue) storeStats[storeCode].overdue++;
+
+        const pA = String(o['客訂商品A'] || '').trim();
+        const pB = String(o['客訂商品B'] || '').trim();
+        if(pA) productCounts[pA] = (productCounts[pA] || 0) + 1;
+        if(pB) productCounts[pB] = (productCounts[pB] || 0) + 1;
+    });
+
+    document.getElementById('stat-pending').textContent = pending;
+    document.getElementById('stat-purchased').textContent = purchased;
+    document.getElementById('stat-arrived').textContent = arrived;
+    document.getElementById('stat-overdue').textContent = overdue;
+    document.getElementById('stat-today').textContent = today;
+
+    renderDashStoreTable(Object.values(storeStats));
+
+    const topProducts = Object.entries(productCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    document.getElementById('dashTopProducts').innerHTML = topProducts.map((p, idx) => `
+        <li class="flex justify-between items-center py-1.5 border-b border-gray-100 last:border-0">
+            <span class="text-gray-700 truncate w-3/4"><span class="text-gray-400 w-5 inline-block">${idx+1}.</span> ${p[0]}</span>
+            <span class="font-bold text-indigo-600 bg-indigo-50 px-2 rounded-full text-xs">${p[1]} 件</span>
+        </li>
+    `).join('') || '<li class="text-gray-400">尚無資料</li>';
+}
+
+window.sortDashTable = function(key) {
+    if(dashCurrentSort.key === key) dashCurrentSort.asc = !dashCurrentSort.asc;
+    else { dashCurrentSort.key = key; dashCurrentSort.asc = false; }
+    renderDashboard(); 
+}
+
+function renderDashStoreTable(storeArr) {
+    storeArr.sort((a, b) => {
+        let valA = a[dashCurrentSort.key], valB = b[dashCurrentSort.key];
+        if (typeof valA === 'string') return dashCurrentSort.asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        return dashCurrentSort.asc ? valA - valB : valB - valA;
+    });
+
+    const tbody = document.getElementById('dashStoreTableBody');
+    tbody.innerHTML = '';
+
+    storeArr.forEach(s => {
+        const rate = s.total === 0 ? 0 : Math.round((s.overdue / s.total) * 100);
+        const rateColor = rate > 20 ? 'text-red-600 font-bold' : 'text-gray-500';
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-indigo-50/50 transition-colors';
+        tr.innerHTML = `
+            <td class="py-3 px-3 font-medium text-gray-800">${s.name}</td>
+            <td class="py-3 px-3 text-gray-600">${s.total}</td>
+            <td class="py-3 px-3 text-orange-500 font-bold">${s.pending}</td>
+            <td class="py-3 px-3 ${rateColor}">${s.overdue} <span class="text-xs">(${rate}%)</span></td>
+            <td class="py-3 px-3 text-right">
+                <button class="text-indigo-600 text-sm font-bold hover:underline" onclick="jumpToStoreFromDash('${s.code}', '${s.name}')">查看清單 ➜</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+window.jumpToStoreFromDash = function(storeCode, storeName) {
+    const region = dashStoreRegions[storeCode];
+    if(region) {
+        document.getElementById('regionSelect').value = region;
+        localStorage.setItem('selected_region', region);
+        updateStoreSelectOptions(region); 
+        
+        document.getElementById('storeSelect').value = storeCode;
+        localStorage.setItem('selected_store', storeCode);
+        currentValidStore = storeCode; 
+        updateStoreDisplay();
+        
+        if(typeof fetchOrders === 'function') fetchOrders();
+        dashboardModal.classList.add('hidden');
+    }
+};
+
+if(dashExportExcel) {
+    dashExportExcel.addEventListener('click', () => {
+        if(dashRawOrders.length === 0) return alert('目前無資料可匯出');
+        const filterRegion = dashRegionFilter.classList.contains('hidden') ? 'all' : dashRegionFilter.value;
+        const orders = dashRawOrders.filter(r => filterRegion === 'all' || dashStoreRegions[String(r['店編號']).trim()] === filterRegion);
+
+        if(orders.length === 0) return alert('該條件下無資料');
+
+        const headers = ['店別', '狀態', '客號', '姓名', '電話', '商品A', '商品A數量', '商品B', '建立日期', '備註'];
+        let csvContent = '\uFEFF' + headers.join(',') + '\n';
+
+        orders.forEach(o => {
+            const row = [
+                dashStoreNames[o['店編號']] || o['店編號'],
+                getStatus(o).label,
+                o['客號'] || '',
+                o['姓名'] || '',
+                o['電話'] || o['連絡電話'] || '',
+                o['客訂商品A'] || '',
+                o['A數量'] || '',
+                o['客訂商品B'] || '',
+                formatDateMMDD(o['建立日期'] || o['建立時間']),
+                (o['備註']||'').replace(/\n/g, ' ')
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+            csvContent += row.join(',') + '\n';
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `客訂報表_${filterRegion}_${todayLocalForInput()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+}
