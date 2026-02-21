@@ -595,8 +595,9 @@ if(openDashboardBtn) {
         dashboardModal.classList.remove('hidden'); dashLoader.classList.remove('hidden');
 
         try {
-            const fd = new FormData(); fd.append('action', 'dashboard'); fd.append('password', pwd.trim());
-            const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
+            // 已將 POST 修正為 GET，解決「未知動作」的錯誤
+            const url = `${SCRIPT_URL}?action=dashboard&password=${encodeURIComponent(pwd.trim())}`;
+            const resp = await fetch(url);
             const json = await resp.json();
 
             if(json.result !== 'success') throw new Error(json.error || '權限驗證失敗');
