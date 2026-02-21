@@ -3,14 +3,12 @@
 // ==========================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwXlqgc15p7ztO4x9peBrpbFwm_SPFdry78qBa03aWfwTuUnkK4rhExs_Ht4Ompf3Sq/exec";
 
-// 資料容器 (讓所有檔案都能存取)
 let allOrders = [];
 let allLongTermOrders = [];
 let allBlacklistData = [];
 let allStoresCache = []; 
 let currentFilter = 'all';
 
-// DOM 元素參考 (跨檔案使用的主要元素)
 const storeSelect = document.getElementById('storeSelect');
 const topMessage = document.getElementById('top-message');
 const dataTableHeaders = document.getElementById('data-table-headers');
@@ -22,7 +20,6 @@ const currentStoreBadge = document.getElementById('currentStoreBadge');
 // ==========================================
 // 2. 工具函式 (Helper Functions)
 // ==========================================
-
 function pad(n) { return String(n).padStart(2, '0'); }
 
 function todayLocalForInput() { 
@@ -41,9 +38,7 @@ function toDateOnly(val) {
     if (!val && val !== 0) return '';
     const s = String(val).trim();
     const m1 = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-    if (m1) {
-        return `${m1[1]}-${String(m1[2]).padStart(2, '0')}-${String(m1[3]).padStart(2, '0')}`;
-    }
+    if (m1) return `${m1[1]}-${String(m1[2]).padStart(2, '0')}-${String(m1[3]).padStart(2, '0')}`;
     return '';
 }
 
@@ -65,9 +60,7 @@ function showTopMessage(txt, isError = false) {
 
 function formatFieldValueIfDate(header, val) {
     if (!val) return '';
-    if (header.includes('日期') || header.includes('Date')) {
-        return formatDateShort(val);
-    }
+    if (header.includes('日期') || header.includes('Date')) return formatDateShort(val);
     return val;
 }
 
@@ -108,10 +101,7 @@ function getStatus(order) {
     if (order['通知日期']) return { key: '已通知', label: '已通知', class: 'notified' };
     if (order['未接電話日期']) return { key: '未接', label: '未接', class: 'missed' };
     if (order['到貨日期']) return { key: '已到貨', label: '已到貨', class: 'arrived' };
-    
-    // 修改：如果有採購日期 或 分店調撥資料，都歸類為已採購
     if (order['採購日期'] || (order['分店調撥'] && order['分店調撥'].trim())) return { key: '已採購', label: '已採購', class: 'purchase' };
-    
     return { key: '未處理', label: '未處理', class: 'pending' };
 }
 
@@ -128,20 +118,16 @@ function updateStoreDisplay() {
     else { currentStoreBadge.classList.add('hidden'); }
 }
 
-// 解析黑名單資料 (共用於 admin.js 表格與 orders.js 電話檢查)
 function resolveBlacklistRowData(row) {
     const keys = Object.keys(row);
     const findKey = (candidates) => {
-      for (const c of candidates) {
-        if (row[c] !== undefined) return c;
-      }
+      for (const c of candidates) { if (row[c] !== undefined) return c; }
       for (const c of candidates) {
         const found = keys.find(k => k.includes(c));
         if (found) return found;
       }
       return null;
     };
-
     const idKey = findKey(['客號', 'Cust', 'ID', '編號']);
     const nameKey = findKey(['姓名', 'Name', '顧客']);
     const phoneKey = findKey(['電話', 'Phone', 'Mobile', '手機', '連絡']);
@@ -159,24 +145,17 @@ function resolveBlacklistRowData(row) {
     };
 }
 
-/**
- * 安全驗證管理員密碼
- * 不在前端比對，而是發送到後端驗證
- */
 async function verifyAdminPassword(inputPwd) {
     if (!inputPwd) return false;
     try {
         const fd = new FormData();
         fd.append('action', 'verify_admin');
         fd.append('password', inputPwd);
-        
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
         const json = await resp.json();
-        
         return json.result === 'success';
     } catch (e) {
         console.error('Verify password error:', e);
-        alert('無法連接伺服器進行驗證，請檢查網路。');
         return false;
     }
 }
@@ -184,8 +163,6 @@ async function verifyAdminPassword(inputPwd) {
 // ==========================================
 // 3. UI 元件邏輯 (UI Components)
 // ==========================================
-
-// 手風琴開關
 function toggleAccordion(btn, content, icon) {
     if(!btn) return;
     btn.addEventListener('click', () => {
@@ -195,7 +172,6 @@ function toggleAccordion(btn, content, icon) {
     });
 }
 
-// Tag 標籤系統 (用於多選日期)
 function setupTagControls(addBtn, stampBtn, inputEl, tagsContainer, hiddenInput) {
     let items = [];
     addBtn && addBtn.addEventListener('click', () => {
@@ -226,7 +202,6 @@ function setupTagControls(addBtn, stampBtn, inputEl, tagsContainer, hiddenInput)
     return { setItems(arr) { items = (arr || []).filter(Boolean); items.sort(); render(); }, getItems() { return items.slice(); } };
 }
 
-// 快速填入今天日期按鈕 (全域綁定)
 document.querySelectorAll('[data-target]').forEach(btn => {
     btn.addEventListener('click', () => { 
         const targetId = btn.dataset.target;
@@ -235,7 +210,6 @@ document.querySelectorAll('[data-target]').forEach(btn => {
     });
 });
 
-// 手風琴初始化 (共用)
 const formToggleBtn = document.getElementById('formToggleBtn');
 if (formToggleBtn) {
     toggleAccordion(formToggleBtn, document.getElementById('formContent'), document.getElementById('arrowIcon'));
