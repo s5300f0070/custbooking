@@ -71,11 +71,19 @@ function formatFieldValueIfDate(header, val) {
     return val;
 }
 
+// 【重點修正】自動補 0 邏輯升級
 function formatPhone(rawVal) {
     if (rawVal === undefined || rawVal === null) return '';
     const s = String(rawVal).trim();
+    if (s === '') return '';
     if (s.startsWith('0')) return s;
-    if (/^\d{9}$/.test(s)) return '0' + s;
+    
+    // 解決 Google Sheet 將手機或市話當成數字，導致開頭的 '0' 被吃掉的問題
+    // 台灣手機少掉 0 會變 9 碼，市話少掉 0 可能會變 8 碼 (例如 35425530)
+    // 只要是純數字且不以 0 開頭，就自動幫它補 0
+    if (/^\d+$/.test(s)) {
+        return '0' + s;
+    }
     return s;
 }
 
@@ -109,7 +117,6 @@ function getStatus(order) {
     if (order['未接電話日期']) return { key: '未接', label: '未接', class: 'missed' };
     if (order['到貨日期']) return { key: '已到貨', label: '已到貨', class: 'arrived' };
     
-    // 修改：如果有採購日期 或 分店調撥資料，都歸類為已採購
     if (order['採購日期'] || (order['分店調撥'] && order['分店調撥'].trim())) return { key: '已採購', label: '已採購', class: 'purchase' };
     
     return { key: '未處理', label: '未處理', class: 'pending' };
@@ -128,7 +135,7 @@ function updateStoreDisplay() {
     else { currentStoreBadge.classList.add('hidden'); }
 }
 
-// 解析黑名單資料 (共用於 admin.js 表格與 orders.js 電話檢查)
+// 解析黑名單資料
 function resolveBlacklistRowData(row) {
     const keys = Object.keys(row);
     const findKey = (candidates) => {
@@ -161,13 +168,15 @@ function resolveBlacklistRowData(row) {
 
 /**
  * 安全驗證管理員密碼
- * 已將原先的 POST 請求改為 GET 請求以符合後端 action='verify_admin' 的邏輯
  */
 async function verifyAdminPassword(inputPwd) {
     if (!inputPwd) return false;
     try {
-        const url = `${SCRIPT_URL}?action=verify_admin&password=${encodeURIComponent(inputPwd.trim())}`;
-        const resp = await fetch(url);
+        const fd = new FormData();
+        fd.append('action', 'verify_admin');
+        fd.append('password', inputPwd);
+        
+        const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
         const json = await resp.json();
         
         return json.result === 'success';
@@ -182,7 +191,6 @@ async function verifyAdminPassword(inputPwd) {
 // 3. UI 元件邏輯 (UI Components)
 // ==========================================
 
-// 手風琴開關
 function toggleAccordion(btn, content, icon) {
     if(!btn) return;
     btn.addEventListener('click', () => {
@@ -192,7 +200,6 @@ function toggleAccordion(btn, content, icon) {
     });
 }
 
-// Tag 標籤系統 (用於多選日期)
 function setupTagControls(addBtn, stampBtn, inputEl, tagsContainer, hiddenInput) {
     let items = [];
     addBtn && addBtn.addEventListener('click', () => {
@@ -223,7 +230,6 @@ function setupTagControls(addBtn, stampBtn, inputEl, tagsContainer, hiddenInput)
     return { setItems(arr) { items = (arr || []).filter(Boolean); items.sort(); render(); }, getItems() { return items.slice(); } };
 }
 
-// 快速填入今天日期按鈕 (全域綁定)
 document.querySelectorAll('[data-target]').forEach(btn => {
     btn.addEventListener('click', () => { 
         const targetId = btn.dataset.target;
@@ -232,7 +238,6 @@ document.querySelectorAll('[data-target]').forEach(btn => {
     });
 });
 
-// 手風琴初始化 (共用)
 const formToggleBtn = document.getElementById('formToggleBtn');
 if (formToggleBtn) {
     toggleAccordion(formToggleBtn, document.getElementById('formContent'), document.getElementById('arrowIcon'));
