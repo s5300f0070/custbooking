@@ -17,7 +17,6 @@ const editNotifyCtrl = setupTagControls(
     document.getElementById('editNotifyHidden')
 );
 
-// 【已修復】分店調撥控制項 (替換為下拉選單變數)
 const editTransferStoreInput = document.getElementById('editTransferStoreInput');
 const editTransferDateInput = document.getElementById('editTransferDateInput');
 const editStoreTransferHidden = document.getElementById('editStoreTransfer');
@@ -41,10 +40,7 @@ window.addEventListener('load', async () => {
     renderTabs();
     await fetchStores();
     await fetchOrders(); 
-    
-    if(typeof fetchBlacklistData === 'function') {
-        fetchBlacklistData();
-    }
+    if(typeof fetchBlacklistData === 'function') fetchBlacklistData();
 });
 
 // ==========================================
@@ -53,36 +49,88 @@ window.addEventListener('load', async () => {
 
 async function fetchStores() {
     try {
-        const resp = await fetch(`${SCRIPT_URL}?action=stores`);
-        const json = await resp.json();
-        const stores = json.stores || [];
+        const t = new Date().getTime(); // 強制手機放棄快取
+        const resp = await fetch(`${SCRIPT_URL}?action=stores&t=${t}`);
         
+        // 【防呆機制】先抓取純文字，檢查是否被 Google 擋下並跳轉登入頁面
+        const textResp = await resp.text(); 
+        
+        let json;
+        try {
+            json = JSON.parse(textResp);
+        } catch (parseError) {
+            // 如果解析 JSON 失敗，通常代表後端權限設定錯誤，回傳了 HTML (Google 登入頁面)
+            alert("🔴 [系統警告] 無法讀取資料！\n您的 Google Apps Script「存取權限」可能未設定為「所有人」。\n\n請重新「新增部署作業」，並確認權限為「所有人 (Anyone)」。");
+            console.error("解析 JSON 失敗，後端實際回傳內容:", textResp);
+            return;
+        }
+
+        const stores = json.stores || [];
         allStoresCache = stores; 
 
-        storeSelect.innerHTML = '<option value="">請選擇店別</option>';
-        stores.forEach(s => {
-            if(s.name === '店名' || s.code === '店編號') return;
+        const regionSelect = document.getElementById('regionSelect');
+        const regions = [...new Set(allStoresCache.map(s => s.region).filter(Boolean))];
+
+        regionSelect.innerHTML = '<option value="">選擇區域</option>';
+        regions.forEach(r => {
+            if (r === '區域' || r === 'Region') return; 
             const opt = document.createElement('option');
-            opt.value = s.code; 
-            opt.textContent = s.name ? `${s.name}` : s.code;
-            opt.dataset.name = s.name || s.code; 
-            storeSelect.appendChild(opt);
+            opt.value = r; opt.textContent = r;
+            regionSelect.appendChild(opt);
         });
 
-        const saved = localStorage.getItem('selected_store');
-        if(saved && Array.from(storeSelect.options).some(o=>o.value===saved)) {
-            storeSelect.value = saved; 
-            currentValidStore = saved; 
-            updateStoreDisplay(); 
+        storeSelect.innerHTML = '<option value="">請選擇店別</option>';
+
+        const savedRegion = localStorage.getItem('selected_region');
+        const savedStore = localStorage.getItem('selected_store');
+
+        if (savedRegion && regions.includes(savedRegion)) {
+            regionSelect.value = savedRegion;
+            updateStoreSelectOptions(savedRegion); 
+            if (savedStore && Array.from(storeSelect.options).some(o => o.value === savedStore)) {
+                storeSelect.value = savedStore; 
+                currentValidStore = savedStore; 
+                updateStoreDisplay(); 
+            }
         }
         
-        if(typeof checkStoreSettings === 'function') {
-            checkStoreSettings(); 
-        }
+        if(typeof checkStoreSettings === 'function') checkStoreSettings(); 
     } catch(e) { 
         console.error('Fetch Stores Error:', e); 
+        alert("🔴 [網路連線錯誤]\n無法連線至資料庫，請檢查：\n1. utils.js 裡的 SCRIPT_URL 網址是否正確\n2. 手機網路是否正常\n\n錯誤代碼：" + e.message);
     }
 }
+
+function updateStoreSelectOptions(region) {
+    storeSelect.innerHTML = '<option value="">請選擇店別</option>';
+    if (!region) { storeSelect.disabled = true; return; }
+    storeSelect.disabled = false;
+    
+    const filteredStores = allStoresCache.filter(s => s.region === region);
+    filteredStores.forEach(s => {
+        if(s.name === '店名' || s.code === '店編號') return;
+        const opt = document.createElement('option');
+        opt.value = s.code; 
+        opt.textContent = s.name ? `${s.name}` : s.code;
+        opt.dataset.name = s.name || s.code;
+        storeSelect.appendChild(opt);
+    });
+}
+
+document.getElementById('regionSelect').addEventListener('change', () => {
+    const regionSelect = document.getElementById('regionSelect');
+    const region = regionSelect.value;
+    localStorage.setItem('selected_region', region);
+
+    storeSelect.value = '';
+    currentValidStore = '';
+    localStorage.removeItem('selected_store');
+    updateStoreDisplay();
+
+    updateStoreSelectOptions(region);
+    fetchOrders(); 
+    if(typeof renderBlacklistTable === 'function') renderBlacklistTable();
+});
 
 storeSelect.addEventListener('change', async () => {
     const targetStoreCode = storeSelect.value;
@@ -98,31 +146,24 @@ storeSelect.addEventListener('change', async () => {
     }
 
     const input = prompt(`您即將切換至：${targetStoreName}\n\n為確保安全性，請輸入該店的【店編號】(英文字母需大寫)以確認切換：`);
-
     if (!input) {
         storeSelect.value = currentValidStore; 
         return;
     }
 
     let isVerified = false;
-
     if (input.trim() === targetStoreCode) {
         isVerified = true;
     } else {
         const isAdmin = await verifyAdminPassword(input.trim());
-        if (isAdmin) {
-            isVerified = true;
-        }
+        if (isAdmin) isVerified = true;
     }
 
     if (isVerified) {
         currentValidStore = targetStoreCode;
         localStorage.setItem('selected_store', targetStoreCode);
         updateStoreDisplay();
-        
-        if(typeof checkStoreSettings === 'function') {
-            checkStoreSettings();
-        }
+        if(typeof checkStoreSettings === 'function') checkStoreSettings();
         fetchOrders();
     } else {
         alert('驗證失敗 (店號錯誤或管理員密碼錯誤)，還原至上一個店別。');
@@ -137,7 +178,20 @@ async function fetchOrders() {
     dataMessageBox.classList.add('hidden');
     
     const store = storeSelect.value;
-    const url = store ? `${SCRIPT_URL}?store=${encodeURIComponent(store)}` : SCRIPT_URL;
+
+    if (!store) {
+        allOrders = []; 
+        allLongTermOrders = [];
+        renderTableHeaders(['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新']);
+        if(typeof renderLongTermTableHeaders === 'function') renderLongTermTableHeaders(['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新']);
+        renderTable(); 
+        if(typeof renderLongTermTable === 'function') renderLongTermTable();
+        dataLoader.classList.add('hidden');
+        return;
+    }
+
+    const t = new Date().getTime(); 
+    const url = `${SCRIPT_URL}?store=${encodeURIComponent(store)}&t=${t}`;
     
     try {
         const resp = await fetch(url);
@@ -146,36 +200,20 @@ async function fetchOrders() {
         
         allOrders = []; 
         allLongTermOrders = [];
-        
         rows.forEach(r => {
-            if(r['固定/長期客訂'] === '是' || r['固定/長期客訂'] === true) {
-                allLongTermOrders.push(r);
-            } else {
-                allOrders.push(r);
-            }
+            if(r['固定/長期客訂'] === '是' || r['固定/長期客訂'] === true) allLongTermOrders.push(r);
+            else allOrders.push(r);
         });
         
-        const fixedHeaders = ['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新'];
-        renderTableHeaders(fixedHeaders);
-        
-        const longTermHeaders = ['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新'];
-        if(typeof renderLongTermTableHeaders === 'function') {
-            renderLongTermTableHeaders(longTermHeaders);
-        }
-
+        renderTableHeaders(['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新']);
+        if(typeof renderLongTermTableHeaders === 'function') renderLongTermTableHeaders(['姓名', '手機號碼', '商品', '進度', '付清', '建立日期', '最後更新']);
         renderTable(); 
-        
-        if(typeof renderLongTermTable === 'function') {
-            renderLongTermTable();
-        }
-
+        if(typeof renderLongTermTable === 'function') renderLongTermTable();
     } catch(e) { 
         console.error(e); 
         dataMessageBox.classList.remove('hidden');
         dataMessageBox.textContent = '讀取失敗：' + e.message;
-    } finally { 
-        dataLoader.classList.add('hidden'); 
-    }
+    } finally { dataLoader.classList.add('hidden'); }
 }
 
 // ==========================================
@@ -197,6 +235,14 @@ function renderTableHeaders(displayHeaders){
 function renderTable() {
     const tableContainer = document.getElementById('dataTableContainer');
     dataTableBody.innerHTML = '';
+    
+    if (!storeSelect.value) {
+        noDataText.textContent = '請先選擇上方的「區域」與「店別」以載入訂單';
+        noDataText.classList.remove('hidden'); 
+        tableContainer.classList.add('hidden'); 
+        return;
+    }
+
     const term = searchInput.value.trim().toLowerCase();
     
     let filtered = allOrders.filter(o => {
@@ -213,6 +259,7 @@ function renderTable() {
     });
     
     if(filtered.length === 0) { 
+        noDataText.textContent = '該店目前沒有符合的訂單';
         noDataText.classList.remove('hidden'); 
         tableContainer.classList.add('hidden'); 
         return; 
@@ -384,7 +431,6 @@ phoneInput.addEventListener('input', function() {
     }
 });
 
-// 【已修復】分店調撥 UI 生成 (改為下拉選單)
 function setupStoreTransferUI() {
     const currentStoreName = getSelectedStoreName();
     if(!transferStoreSelect) return;
@@ -423,7 +469,6 @@ function openEditModal(order) {
     document.getElementById('editRowIndex').value = order['__row'];
     document.getElementById('editCustomerID').value = order['客號']||'';
     document.getElementById('editCustomerName').value = order['姓名']||'';
-    // 電話套用自動補 0
     document.getElementById('editPhone').value = formatPhone(order['電話']||order['連絡電話']);
     document.getElementById('editProductAName').value = order['客訂商品A']||'';
     document.getElementById('editProductASpec').value = order['A商品規格']||'';
@@ -550,7 +595,8 @@ async function performHistorySearch() {
     historyNoData.classList.add('hidden');
     
     try {
-        const url = `${SCRIPT_URL}?action=search_history&store=${encodeURIComponent(store)}&term=${encodeURIComponent(term)}`;
+        const t = new Date().getTime(); // 強制破除手機快取
+        const url = `${SCRIPT_URL}?action=search_history&store=${encodeURIComponent(store)}&term=${encodeURIComponent(term)}&t=${t}`;
         const resp = await fetch(url);
         const json = await resp.json();
         
