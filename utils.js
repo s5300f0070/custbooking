@@ -1,7 +1,7 @@
 // ==========================================
 // 1. 全域設定與變數 (Global Config & State)
 // ==========================================
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwXlqgc15p7ztO4x9peBrpbFwm_SPFdry78qBa03aWfwTuUnkK4rhExs_Ht4Ompf3Sq/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9D_Jzr1CDrzG7SNGPZQPbxRzxr4eC7MXWhGb8dUBISfmlhhjytBgJkQ1Ml_1EmOJ4/exec";
 
 // 資料容器 (讓所有檔案都能存取)
 let allOrders = [];
@@ -242,3 +242,4 @@ const formToggleBtn = document.getElementById('formToggleBtn');
 if (formToggleBtn) {
     toggleAccordion(formToggleBtn, document.getElementById('formContent'), document.getElementById('arrowIcon'));
 }
+
