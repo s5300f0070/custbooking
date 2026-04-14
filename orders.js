@@ -51,9 +51,7 @@ function populateStoreSelect(region) {
     storeSelect.disabled = false;
     let targetStores = [];
 
-    if (region === 'ALL') {
-        targetStores = allStoresCache.filter(s => s.code && s.name !== '店名' && s.code !== '店編號');
-    } else if (region === 'OTHER') {
+    if (region === 'OTHER') {
         targetStores = allStoresCache.filter(s => !s.region && s.code && s.name !== '店名' && s.code !== '店編號');
     } else {
         targetStores = allStoresCache.filter(s => s.region === region && s.code && s.name !== '店名' && s.code !== '店編號');
@@ -205,7 +203,7 @@ storeSelect.addEventListener('change', async () => {
     const targetValue = selectedOption.dataset.value;
     const targetName = selectedOption.textContent.replace(/^[🌟📍📁🏠]\s*/, '');
 
-    const input = prompt(`您即將切換至：${targetName}\n\n為確保安全性，請輸入對應的密碼或代碼：`);
+    const input = prompt(`您即將切換至：${targetName}\n\n為確保安全性，請輸入該店的【密碼】：`);
 
     if (!input) { 
         storeSelect.value = previousStoreSelectValue; 
@@ -213,7 +211,24 @@ storeSelect.addEventListener('change', async () => {
     }
 
     submitButton.disabled = true; 
-    const isVerified = await verifyAccess(targetType, targetValue, input.trim());
+    
+    // 向後端驗證密碼
+    let isVerified = false;
+    try {
+        const fd = new FormData();
+        fd.append('action', 'verify_store_password');
+        fd.append('storeCode', targetValue);
+        fd.append('password', input.trim());
+        
+        const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
+        const json = await resp.json();
+        if (json.result === 'success') {
+            isVerified = true;
+        }
+    } catch (e) {
+        console.error(e);
+    }
+
     submitButton.disabled = false;
 
     if (isVerified) {
@@ -227,7 +242,7 @@ storeSelect.addEventListener('change', async () => {
         if(typeof checkStoreSettings === 'function') checkStoreSettings();
         fetchOrders();
     } else {
-        alert('驗證失敗 (密碼或代碼錯誤)，還原至上一個選擇。');
+        alert('驗證失敗 (密碼錯誤)，還原至上一個選擇。');
         storeSelect.value = previousStoreSelectValue; 
     }
 });
@@ -616,6 +631,8 @@ const historyNoData = document.getElementById('historyNoData');
 const historyLoader = document.getElementById('historyLoader');
 
 document.getElementById('searchHistoryBtn').addEventListener('click', () => {
+    const store = storeSelect.value;
+    if (!store) { alert('請先選擇分店才能查詢該店的歷史資料'); return; }
     historySearchInput.value = '';
     historyTableBody.innerHTML = '';
     historyTableHeaders.innerHTML = '';
@@ -629,6 +646,7 @@ document.getElementById('historySearchBtn').addEventListener('click', performHis
 historySearchInput.addEventListener('keydown', (e) => { if(e.key==='Enter') performHistorySearch(); });
 
 async function performHistorySearch() {
+    const store = storeSelect.value;
     const term = historySearchInput.value.trim();
     if (!term) { alert('請輸入搜尋關鍵字 (例如姓名、電話或商品名稱)'); return; }
     
@@ -645,7 +663,15 @@ async function performHistorySearch() {
         if(json.result === 'success') {
             let rows = json.rows || [];
             const headers = json.headers || [];
-            
+            if (term) {
+                const lowerTerm = term.toLowerCase();
+                rows = rows.filter(r => {
+                    return Object.entries(r).some(([key, val]) => {
+                        if (key === '__row') return false;
+                        return String(val).toLowerCase().includes(lowerTerm);
+                    });
+                });
+            }
             if(rows.length === 0) {
                 historyNoData.textContent = '查無符合資料';
                 historyNoData.classList.remove('hidden');
