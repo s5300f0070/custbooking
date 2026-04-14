@@ -9,6 +9,17 @@ window.addEventListener('load', async () => {
     if(typeof fetchBlacklistData === 'function') fetchBlacklistData();
 });
 
+function toggleBackupBtn() {
+    const backupBtn = document.getElementById('backupBtn');
+    if (backupBtn) {
+        if (currentValidStoreType === 'REGION') {
+            backupBtn.classList.remove('hidden');
+        } else {
+            backupBtn.classList.add('hidden');
+        }
+    }
+}
+
 function populateStoreSelect(region) {
     if (!storeSelect) return;
     storeSelect.innerHTML = '<option value="">請選擇店別</option>';
@@ -41,6 +52,7 @@ if (regionSelect) {
         currentValidStoreType = 'ALL';
         currentValidStoreValue = '';
         updateStoreDisplay();
+        toggleBackupBtn();
         
         allOrders = [];
         allLongTermOrders = [];
@@ -84,7 +96,6 @@ async function fetchStores() {
                 regionSelect.value = targetRegion;
                 populateStoreSelect(targetRegion);
                 
-                // 若記憶的狀態為全區模式，則動態生出隱藏的全區選項以供選擇
                 if (savedVal.startsWith('REGION_')) {
                     const allOpt = document.createElement('option');
                     allOpt.value = savedVal;
@@ -104,6 +115,7 @@ async function fetchStores() {
                     currentValidStoreValue = localStorage.getItem('auth_value') || (savedVal.startsWith('REGION_') ? targetRegion : savedVal.replace('STORE_', ''));
                     updateStoreDisplay(); 
                     setupFormStoreSelect();
+                    toggleBackupBtn();
                 }
             }
         }
@@ -115,14 +127,13 @@ storeSelect.addEventListener('change', async () => {
     const selectedOption = storeSelect.options[storeSelect.selectedIndex];
     if (!selectedOption || !selectedOption.value) {
         previousStoreSelectValue = ''; currentValidStoreType = 'ALL'; currentValidStoreValue = '';
-        localStorage.removeItem('selected_store_value'); updateStoreDisplay(); fetchOrders(); return;
+        localStorage.removeItem('selected_store_value'); updateStoreDisplay(); fetchOrders(); toggleBackupBtn(); return;
     }
 
     if (selectedOption.dataset.type === 'REGION') return;
 
     const storeCode = selectedOption.dataset.value;
     const storeName = selectedOption.dataset.name;
-    const storeRegion = selectedOption.dataset.region;
 
     const input = prompt(`請輸入 ${storeName} 的店密碼：`);
     if (!input) { storeSelect.value = previousStoreSelectValue; return; }
@@ -147,6 +158,7 @@ storeSelect.addEventListener('change', async () => {
             updateStoreDisplay();
             setupFormStoreSelect();
             if(typeof checkStoreSettings === 'function') checkStoreSettings();
+            toggleBackupBtn();
             
             fetchOrders();
         } else {
@@ -297,7 +309,6 @@ function renderTabs() {
 }
 window.setFilter = (key) => { currentFilter = key; renderTabs(); renderTable(); };
 
-// 區經理模式綁定
 const regionManagerBtn = document.getElementById('regionManagerBtn');
 if (regionManagerBtn) {
     regionManagerBtn.addEventListener('click', async () => {
@@ -349,6 +360,7 @@ if (regionManagerBtn) {
                 updateStoreDisplay();
                 if (typeof setupFormStoreSelect === 'function') setupFormStoreSelect();
                 if (typeof checkStoreSettings === 'function') checkStoreSettings();
+                toggleBackupBtn();
                 
                 alert(`區經理驗證成功！已進入【${currentValidStoreValue}】全區模式。`);
                 fetchOrders();
