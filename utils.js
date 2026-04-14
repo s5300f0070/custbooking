@@ -167,8 +167,7 @@ async function verifyAdminPassword(inputPwd, storeCode = '') {
 function toggleAccordion(btn, content, icon) {
     if(!btn || !content) return;
     btn.addEventListener('click', () => {
-        const isOpen = content.classList.contains('open');
-        content.classList.toggle('open');
+        const isOpen = content.classList.toggle('open');
         if(icon) icon.style.transform = isOpen ? 'rotate(180deg)' : 'rotate(0deg)';
     });
 }
@@ -212,4 +211,23 @@ document.querySelectorAll('[data-target]').forEach(btn => {
         const targetEl = document.getElementById(targetId);
         if(targetEl) targetEl.value = todayLocalForInput(); 
     });
+});
+
+// 綁定各個手風琴收折按鈕
+document.addEventListener('DOMContentLoaded', () => {
+    toggleAccordion(
+        document.getElementById('formToggleBtn'), 
+        document.getElementById('formContent'), 
+        document.getElementById('arrowIcon')
+    );
+    toggleAccordion(
+        document.getElementById('longTermToggleBtn'), 
+        document.getElementById('longTermContent'), 
+        document.getElementById('longTermArrowIcon')
+    );
+    toggleAccordion(
+        document.getElementById('blacklistToggleBtn'), 
+        document.getElementById('blacklistContent'), 
+        document.getElementById('blacklistArrowIcon')
+    );
 });
