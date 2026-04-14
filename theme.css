@@ -1,0 +1,108 @@
+/* =========================================================
+   全域基礎字體與元件結構 (Global Base)
+   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+/* === UI 共用結構設定 === */
+.btn { transition: all 0.2s; }
+.btn:active { transform: scale(0.96); }
+.input-field { transition: all 0.2s; outline: none; }
+.tab-btn { transition: all 0.2s; }
+.accordion-content { transition: grid-template-rows 0.3s ease-out; }
+.accordion-toggle { transition: background-color 0.2s; }
+.loader { animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* =========================================================
+   1. 深色科技 (Dark Tech - COMMAND_DECK Style)
+   ========================================================= */
+html.dark body { background-color: #131315 !important; color: #e5e1e4 !important; }
+
+html.dark .bg-white { background-color: #201f21 !important; border-color: #353437 !important; }
+html.dark .text-gray-800, html.dark .text-gray-900, html.dark .text-slate-700 { color: #e5e1e4 !important; }
+html.dark .text-gray-500, html.dark .text-gray-600, html.dark .text-gray-400 { color: #c7c4d7 !important; }
+html.dark .bg-gray-50, html.dark .bg-gray-100, html.dark .bg-slate-50, html.dark .bg-slate-200 { background-color: #2a2a2c !important; border-color: #464554 !important; }
+html.dark .border-gray-200, html.dark .border-gray-100, html.dark .border-slate-200 { border-color: rgba(255,255,255,0.1) !important; }
+
+html.dark .bg-indigo-50, html.dark .bg-blue-50, html.dark .bg-indigo-50\/60 { background-color: rgba(73,75,214,0.15) !important; border-color: rgba(73,75,214,0.3) !important; }
+html.dark .text-indigo-600, html.dark .text-blue-600, html.dark .text-blue-500 { color: #8083ff !important; }
+html.dark .border-indigo-100, html.dark .border-indigo-200, html.dark .border-blue-100 { border-color: rgba(73,75,214,0.3) !important; }
+
+html.dark .bg-green-50, html.dark .bg-green-100, html.dark .bg-green-50\/50 { background-color: rgba(3, 181, 211, 0.1) !important; border-color: rgba(3, 181, 211, 0.3) !important; }
+html.dark .text-green-600, html.dark .text-green-700 { color: #4cd7f6 !important; }
+html.dark .border-green-100, html.dark .border-green-200 { border-color: rgba(3, 181, 211, 0.3) !important; }
+
+html.dark .bg-red-50, html.dark .bg-red-100 { background-color: rgba(147, 0, 10, 0.15) !important; border-color: rgba(147, 0, 10, 0.4) !important; }
+html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-800 { color: #ffb4ab !important; }
+html.dark .border-red-100, html.dark .border-red-200 { border-color: rgba(147, 0, 10, 0.4) !important; }
+
+html.dark .bg-orange-50, html.dark .bg-orange-50\/50 { background-color: rgba(255, 180, 171, 0.1) !important; border-color: rgba(255, 180, 171, 0.3) !important; }
+html.dark .text-orange-500, html.dark .text-orange-600, html.dark .text-orange-800 { color: #ffdad6 !important; }
+html.dark .border-orange-100, html.dark .border-orange-200 { border-color: rgba(255, 180, 171, 0.3) !important; }
+
+html.dark .bg-purple-50 { background-color: rgba(225, 78, 246, 0.1) !important; border-color: rgba(225, 78, 246, 0.3) !important; }
+html.dark .text-purple-600, html.dark .text-purple-700 { color: #fbabff !important; }
+
+html.dark th { background-color: #353437 !important; color: #c0c1ff !important; border-bottom: 1px solid rgba(255,255,255,0.1) !important; }
+html.dark td { border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+
+/* =========================================================
+   針對深色模式下的表格商品名稱強制改為白色
+   ========================================================= */
+html.dark .responsive-table td:nth-child(4),
+html.dark .responsive-table td[data-label="商品"] {
+    color: #ffffff !important;
+}
+html.dark .responsive-table td:nth-child(4) [class*="text-indigo-"],
+html.dark .responsive-table td:nth-child(4) [class*="text-blue-"],
+html.dark .responsive-table td[data-label="商品"] [class*="text-indigo-"],
+html.dark .responsive-table td[data-label="商品"] [class*="text-blue-"] {
+    color: #ffffff !important;
+}
+
+html.dark .modal-backdrop { background-color: rgba(0,0,0,0.7) !important; backdrop-filter: blur(8px); }
+html.dark .modal-card { background: #201f21 !important; border: 1px solid rgba(192, 193, 255, 0.1) !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6) !important; }
+
+html.dark .input-field { background-color: #0e0e10 !important; color: #e5e1e4 !important; border: 1px solid #464554 !important; }
+html.dark .input-field:focus { box-shadow: 0 0 0 2px rgba(76, 215, 246, 0.5) !important; border-color: #4cd7f6 !important; }
+html.dark .input-field:disabled, html.dark .select-disabled { background-color: #2a2a2c !important; color: #908fa0 !important; }
+
+html.dark .btn.bg-indigo-600, html.dark .btn.bg-blue-600 { background-color: #494bd6 !important; color: #fff !important; box-shadow: 0 0 15px rgba(73,75,214,0.4); border: none !important; }
+html.dark .btn.bg-indigo-600:hover, html.dark .btn.bg-blue-600:hover { background-color: #8083ff !important; box-shadow: 0 0 25px rgba(73,75,214,0.6); }
+html.dark .btn.bg-gray-800 { background-color: #353437 !important; color: #fff !important; }
+html.dark .btn.bg-gray-800:hover { background-color: #464554 !important; }
+
+html.dark .tag { background:#353437 !important; border:1px solid #464554 !important; color:#c7c4d7 !important; }
+html.dark .tag .remove { color:#ffb4ab !important; }
+html.dark .tab-btn { background: #2a2a2c !important; border: 1px solid rgba(255,255,255,0.1) !important; color: #c7c4d7 !important; }
+html.dark .tab-btn.active { background: #494bd6 !important; color: #fff !important; border-color: #494bd6 !important; box-shadow: 0 0 10px rgba(73,75,214,0.5) !important; }
+
+html.dark .status-badge.pending { background:#353437 !important; color:#c7c4d7 !important; border: 1px solid #464554 !important;}
+html.dark .status-badge.purchase { background:rgba(73,75,214,0.2) !important; color:#c0c1ff !important; border: 1px solid rgba(73,75,214,0.5) !important;}
+html.dark .status-badge.arrived { background:rgba(225, 78, 246, 0.2) !important; color:#fbabff !important; border: 1px solid rgba(225, 78, 246, 0.5) !important;}
+html.dark .status-badge.missed { background:rgba(147, 0, 10, 0.3) !important; color:#ffb4ab !important; border: 1px solid rgba(147, 0, 10, 0.5) !important;}
+html.dark .status-badge.notified { background:rgba(3, 181, 211, 0.2) !important; color:#4cd7f6 !important; border: 1px solid rgba(3, 181, 211, 0.5) !important;}
+html.dark .status-badge.closed { background:rgba(3, 181, 211, 0.1) !important; color:#4cd7f6 !important; border: 1px solid rgba(3, 181, 211, 0.3) !important;}
+
+html.dark .accordion-toggle { background-color: #201f21 !important; border-color: #353437 !important; }
+html.dark .accordion-toggle:hover { background-color: #2a2a2c !important; }
+html.dark .accordion-title { color: #e1e0ff !important; }
+html.dark .section-title { color: #908fa0 !important; }
+html.dark .section-title::after { background: rgba(255,255,255,0.1) !important; }
+html.dark .loader { border-color: #353437 !important; border-top-color: #494bd6 !important; }
+
+@media (max-width: 768px) {
+  html.dark .responsive-table tbody tr { border: 1px solid rgba(255,255,255,0.1) !important; box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important; background-color: #201f21 !important; }
+  html.dark .responsive-table td { border-bottom: 1px solid rgba(255,255,255,0.05) !important; color: #e5e1e4 !important; }
+  html.dark .responsive-table td::before { color: #908fa0 !important; }
+}
+@media (min-width: 769px) {
+  html.dark .table-container { background: #201f21 !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5) !important; }
+}
+
+/* =========================================================
+   2. 原始模式 (Original Mode - Default Clean Style)
+   ========================================================= */
+/* 保留原本預設 Tailwind 顏色與無特效風格 */
+html.original-mode body { background-image: none !important; }
