@@ -1,7 +1,7 @@
 // ==========================================
 // 1. 全域設定與變數 (Global Config & State)
 // ==========================================
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyfDwaVTkHD-HGtY-6MzxscARnxwML9j1Ejn4v5cvPCAlgIPNRNkuU07r_61OBEVAYK/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9D_Jzr1CDrzG7SNGPZQPbxRzxr4eC7MXWhGb8dUBISfmlhhjytBgJkQ1Ml_1EmOJ4/exec";
 
 // 資料容器
 let allOrders = [];
