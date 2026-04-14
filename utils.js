@@ -3,23 +3,25 @@
 // ==========================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyfDwaVTkHD-HGtY-6MzxscARnxwML9j1Ejn4v5cvPCAlgIPNRNkuU07r_61OBEVAYK/exec";
 
-// 資料容器
+// 資料容器 (讓所有檔案都能存取)
 let allOrders = [];
 let allLongTermOrders = [];
 let allBlacklistData = [];
 let allStoresCache = []; 
 let currentFilter = 'all';
 
-// 權限範圍
-let currentValidStoreType = 'ALL'; 
+// 權限範圍變數
+let currentValidStoreType = 'ALL'; // 'ALL', 'REGION', 'STORE'
 let currentValidStoreValue = '';
 
-// 統一宣告 DOM 元素
+// --- 統一在此宣告 DOM 元素，確保全域唯一，避免宣告衝突 ---
 const regionSelect = document.getElementById('regionSelect');
 const storeSelect = document.getElementById('storeSelect');
 const topMessage = document.getElementById('top-message');
 const dataTableHeaders = document.getElementById('data-table-headers');
 const longTerm_dataTableHeaders = document.getElementById('longTerm_data-table-headers');
+const blacklistDataTableHeaders = document.getElementById('blacklist_data-table-headers');
+const blacklistDataTableBody = document.getElementById('blacklist_data-table-body');
 const currentStoreBadge = document.getElementById('currentStoreBadge');
 
 // ==========================================
@@ -63,6 +65,9 @@ function formatDateMMDD(val) {
     return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
+/**
+ * 根據欄位標題判斷是否為日期並格式化，解決黑名單報錯問題
+ */
 function formatFieldValueIfDate(header, val) {
     if (!val) return '';
     if (header.includes('日期') || header.includes('Date') || header.includes('時間')) {
@@ -93,6 +98,53 @@ function updateStoreDisplay() {
         currentStoreBadge.classList.add('hidden'); 
     }
 }
+
+function getSelectedStoreName() {
+    if (!storeSelect || storeSelect.selectedIndex < 0) return '';
+    const opt = storeSelect.options[storeSelect.selectedIndex];
+    return opt ? (opt.dataset.name || opt.text) : '';
+}
+
+function resolveBlacklistRowData(row) {
+    const findKey = (candidates) => {
+      const keys = Object.keys(row);
+      for (const c of candidates) {
+        if (row[c] !== undefined) return c;
+      }
+      for (const c of candidates) {
+        const found = keys.find(k => k.replace(/\s+/g, "").includes(c));
+        if (found) return found;
+      }
+      return null;
+    };
+    return {
+      id: row[findKey(['客號', 'Cust', 'ID', '編號'])] || '-',
+      name: row[findKey(['姓名', 'Name', '顧客'])] || '未知',
+      phone: row[findKey(['電話', 'Phone', 'Mobile', '手機', '連絡'])] || '',
+      reason: row[findKey(['原因', 'Reason', '事由', '備註', '說明'])] || '',
+      date: row[findKey(['日期', 'Date', 'Time'])] || '',
+      store: row[findKey(['店別', 'Store', '分店', 'StoreName'])] || ''
+    };
+}
+
+async function verifyAdminPassword(inputPwd) {
+    if (!inputPwd) return false;
+    try {
+        const fd = new FormData();
+        fd.append('action', 'verify_admin');
+        fd.append('password', inputPwd);
+        const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
+        const json = await resp.json();
+        return json.result === 'success';
+    } catch (e) {
+        console.error('Verify error:', e);
+        return false;
+    }
+}
+
+// ==========================================
+// 3. UI 元件邏輯 (UI Components)
+// ==========================================
 
 function toggleAccordion(btn, content, icon) {
     if(!btn || !content) return;
@@ -128,7 +180,18 @@ function setupTagControls(addBtn, stampBtn, inputEl, tagsContainer, hiddenInput)
     }
     tagsContainer.addEventListener('click', (e) => {
         const removeBtn = e.target.closest('.remove');
-        if (removeBtn) { items = items.filter(x => x !== removeBtn.dataset.date); render(); }
+        if (removeBtn) {
+            const d = removeBtn.dataset.date;
+            items = items.filter(x => x !== d); render();
+        }
     });
     return { setItems(arr) { items = (arr || []).filter(Boolean); items.sort(); render(); }, getItems() { return items.slice(); } };
 }
+
+document.querySelectorAll('[data-target]').forEach(btn => {
+    btn.addEventListener('click', () => { 
+        const targetId = btn.dataset.target;
+        const targetEl = document.getElementById(targetId);
+        if(targetEl) targetEl.value = todayLocalForInput(); 
+    });
+});
