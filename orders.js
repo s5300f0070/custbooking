@@ -196,15 +196,50 @@ function renderTable() {
         tr.onclick = (e) => { if(!e.target.closest('button')) openEditModal(order); };
         const status = getStatus(order);
         const storeTag = `<div class="text-xs font-bold text-gray-500 mb-1">📍 ${order['店編號']||order['店別']||''}</div>`;
-        const pA = order['客訂商品A'] ? `[${order['客訂商品A']}]` : '';
+        
+        // 渲染商品，並支援缺貨狀態顯示與商品B
+        const isAOut = isChecked(order['A缺貨']) ? '<span class="text-red-600 font-bold mr-1">[缺貨]</span>' : '';
+        const productA = order['客訂商品A'] ? `${isAOut}[${order['客訂商品A']}]${order['A商品規格'] ? `(${order['A商品規格']})` : ''} ${order['A數量'] ? 'x' + order['A數量'] : ''}` : '';
+        
+        const isBOut = isChecked(order['B缺貨']) ? '<span class="text-red-600 font-bold mr-1">[缺貨]</span>' : '';
+        const productB = order['客訂商品B'] ? `${isBOut}[${order['客訂商品B']}]${order['B商品規格'] ? `(${order['B商品規格']})` : ''} ${order['B數量'] ? 'x' + order['B數量'] : ''}` : '';
+
+        // 處理多日期進度格式（套用圖片中的樣式）
+        const formatMulti = (val) => {
+            if(!val) return '';
+            const parts = String(val).split(/[,;，\s]+/).filter(Boolean);
+            if(parts.length === 0) return '';
+            return parts.map(d => {
+                const dobj = new Date(d);
+                if(isNaN(dobj.getTime())) return d;
+                return `${pad(dobj.getMonth()+1)}/${pad(dobj.getDate())}`;
+            }).join(', ');
+        };
+
+        let dateDisplay = '';
+        if(order['採購日期']) dateDisplay += `<div class="text-xs text-blue-600">採購: ${formatMulti(order['採購日期'])}</div>`;
+        if(order['到貨日期']) dateDisplay += `<div class="text-xs text-purple-600">到貨: ${formatMulti(order['到貨日期'])}</div>`;
+        if(order['缺貨通知日期']) dateDisplay += `<div class="text-xs text-red-600 font-bold">缺貨通知: ${formatMulti(order['缺貨通知日期'])}</div>`;
+        if(order['未接電話日期']) dateDisplay += `<div class="text-xs text-red-500">未接: ${formatMulti(order['未接電話日期'])}</div>`;
+        if(order['通知日期']) dateDisplay += `<div class="text-xs text-orange-600">通知: ${formatMulti(order['通知日期'])}</div>`;
+        if(order['取走日期']) dateDisplay += `<div class="text-xs text-green-600">取走: ${formatMulti(order['取走日期'])}</div>`;
+        
+        if(!dateDisplay) {
+            dateDisplay = `<div class="text-xs text-gray-400">${formatDateMMDD(order['最後更新時間'] || order['建立日期'])}</div>`;
+        }
+
+        const paidDisplay = isChecked(order['付清'] || order['paid']) ? '<span class="text-green-600 font-bold">是</span>' : '<span class="text-gray-400">否</span>';
 
         tr.innerHTML = `
           <td><span class="status-badge ${status.class}">${status.label}</span></td>
           <td data-label="姓名" class="font-medium text-gray-900">${storeTag}${order['姓名'] || '未知'}</td>
           <td data-label="手機號碼">${formatPhone(order['電話'] || order['連絡電話'] || '')}</td>
-          <td data-label="商品" class="mobile-full-width"><div class="font-medium text-indigo-900">${pA}</div></td>
-          <td data-label="進度" class="text-gray-500">${formatDateMMDD(order['最後更新時間'] || order['建立日期'])}</td>
-          <td data-label="付清">${isChecked(order['付清']) ? '是' : '否'}</td>
+          <td data-label="商品" class="mobile-full-width">
+             <div class="font-medium text-indigo-900">${productA}</div>
+             ${productB ? `<div class="font-medium text-indigo-900 mt-1">${productB}</div>` : ''}
+          </td>
+          <td data-label="進度" class="text-gray-700">${dateDisplay}</td>
+          <td data-label="付清">${paidDisplay}</td>
           <td data-label="建立日期" class="text-xs text-gray-400">${formatDateMMDD(order['建立日期'])}</td>
           <td data-label="最後更新" class="text-xs text-gray-400">${formatDateMMDD(order['最後更新時間'])}</td>
         `;
