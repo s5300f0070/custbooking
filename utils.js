@@ -3,7 +3,7 @@
 // ==========================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyfDwaVTkHD-HGtY-6MzxscARnxwML9j1Ejn4v5cvPCAlgIPNRNkuU07r_61OBEVAYK/exec";
 
-// 資料容器 (讓所有檔案都能存取)
+// 資料容器
 let allOrders = [];
 let allLongTermOrders = [];
 let allBlacklistData = [];
@@ -11,10 +11,10 @@ let allStoresCache = [];
 let currentFilter = 'all';
 
 // 權限範圍變數
-let currentValidStoreType = 'ALL'; // 'ALL', 'REGION', 'STORE'
+let currentValidStoreType = 'ALL'; 
 let currentValidStoreValue = '';
 
-// --- 統一在此宣告 DOM 元素，確保全域唯一，避免宣告衝突 ---
+// 統一宣告 DOM 元素
 const regionSelect = document.getElementById('regionSelect');
 const storeSelect = document.getElementById('storeSelect');
 const topMessage = document.getElementById('top-message');
@@ -65,9 +65,6 @@ function formatDateMMDD(val) {
     return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
-/**
- * 根據欄位標題判斷是否為日期並格式化，解決黑名單報錯問題
- */
 function formatFieldValueIfDate(header, val) {
     if (!val) return '';
     if (header.includes('日期') || header.includes('Date') || header.includes('時間')) {
@@ -127,24 +124,26 @@ function resolveBlacklistRowData(row) {
     };
 }
 
-async function verifyAdminPassword(inputPwd) {
+/**
+ * 安全驗證密碼
+ * 修正：將動作改為 verify_store_password 以對接後端正確功能
+ */
+async function verifyAdminPassword(inputPwd, storeCode = '') {
     if (!inputPwd) return false;
     try {
         const fd = new FormData();
-        fd.append('action', 'verify_admin');
+        fd.append('action', 'verify_store_password');
+        fd.append('storeCode', storeCode);
         fd.append('password', inputPwd);
+        
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
         const json = await resp.json();
         return json.result === 'success';
     } catch (e) {
-        console.error('Verify error:', e);
+        console.error('Verify password error:', e);
         return false;
     }
 }
-
-// ==========================================
-// 3. UI 元件邏輯 (UI Components)
-// ==========================================
 
 function toggleAccordion(btn, content, icon) {
     if(!btn || !content) return;
