@@ -36,7 +36,7 @@ window.addEventListener('load', async () => {
 });
 
 // ==========================================
-// 2. 資料讀取 (Fetch Data)
+// 2. 資料讀取與連動選單 (Fetch Data & Select)
 // ==========================================
 
 function populateStoreSelect(region) {
@@ -49,51 +49,32 @@ function populateStoreSelect(region) {
     }
 
     storeSelect.disabled = false;
+    let targetStores = [];
 
     if (region === 'ALL') {
-        const opt = document.createElement('option');
-        opt.value = 'ALL';
-        opt.dataset.type = 'ALL';
-        opt.dataset.value = '';
-        opt.textContent = '🌟 總部 (全部)';
-        storeSelect.appendChild(opt);
+        targetStores = allStoresCache.filter(s => s.code && s.name !== '店名' && s.code !== '店編號');
     } else if (region === 'OTHER') {
-        const noRegionStores = allStoresCache.filter(s => !s.region);
-        noRegionStores.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = `STORE_${s.code}`;
-            opt.dataset.type = 'STORE';
-            opt.dataset.value = s.code;
-            opt.dataset.name = s.name || s.code;
-            opt.textContent = `🏠 ${s.code} - ${s.name}`;
-            storeSelect.appendChild(opt);
-        });
+        targetStores = allStoresCache.filter(s => !s.region && s.code && s.name !== '店名' && s.code !== '店編號');
     } else {
-        const rOpt = document.createElement('option');
-        rOpt.value = `REGION_${region}`;
-        rOpt.dataset.type = 'REGION';
-        rOpt.dataset.value = region;
-        rOpt.textContent = `📁 ${region} (全部)`;
-        storeSelect.appendChild(rOpt);
-
-        const rStores = allStoresCache.filter(s => s.region === region);
-        rStores.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = `STORE_${s.code}`;
-            opt.dataset.type = 'STORE';
-            opt.dataset.value = s.code;
-            opt.dataset.name = s.name || s.code;
-            opt.textContent = `🏠 ${s.code} - ${s.name}`;
-            storeSelect.appendChild(opt);
-        });
+        targetStores = allStoresCache.filter(s => s.region === region && s.code && s.name !== '店名' && s.code !== '店編號');
     }
+
+    targetStores.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = `STORE_${s.code}`;
+        opt.dataset.type = 'STORE';
+        opt.dataset.value = s.code;
+        opt.dataset.name = s.name || s.code;
+        opt.textContent = `🏠 ${s.code} - ${s.name}`;
+        storeSelect.appendChild(opt);
+    });
 }
 
+const regionSelect = document.getElementById('regionSelect');
 if (regionSelect) {
     regionSelect.addEventListener('change', () => {
         populateStoreSelect(regionSelect.value);
         
-        // 切換區域時重置畫面與授權狀態
         storeSelect.value = '';
         previousStoreSelectValue = '';
         currentValidStoreType = 'ALL';
@@ -101,7 +82,6 @@ if (regionSelect) {
         updateStoreDisplay();
         setupFormStoreSelect();
         
-        // 清空列表避免跨區殘留資料
         if (typeof renderTable === 'function') {
             allOrders = [];
             allLongTermOrders = [];
@@ -120,14 +100,13 @@ async function fetchStores() {
 
         if (regionSelect) {
             regionSelect.innerHTML = '<option value="">請選擇區域</option>';
-            regionSelect.innerHTML += '<option value="ALL">🌟 總部 (全區)</option>';
 
             const regions = [...new Set(stores.map(s => s.region).filter(Boolean))];
             regions.forEach(r => {
                 regionSelect.innerHTML += `<option value="${r}">📍 ${r}</option>`;
             });
 
-            const noRegionStores = stores.filter(s => !s.region);
+            const noRegionStores = stores.filter(s => !s.region && s.name !== '店名' && s.code !== '店編號');
             if(noRegionStores.length > 0) {
                 regionSelect.innerHTML += '<option value="OTHER">📁 其他分店</option>';
             }
@@ -136,16 +115,10 @@ async function fetchStores() {
         const savedVal = localStorage.getItem('selected_store_value');
         if(savedVal) {
             let targetRegion = '';
-            if (savedVal === 'ALL') {
-                targetRegion = 'ALL';
-            } else if (savedVal.startsWith('REGION_')) {
-                targetRegion = savedVal.replace('REGION_', '');
-            } else if (savedVal.startsWith('STORE_')) {
+            if (savedVal.startsWith('STORE_')) {
                 const sCode = savedVal.replace('STORE_', '');
                 const st = allStoresCache.find(s => s.code === sCode);
-                if (st) {
-                    targetRegion = st.region ? st.region : 'OTHER';
-                }
+                if (st) targetRegion = st.region ? st.region : 'OTHER';
             }
 
             if (targetRegion && regionSelect) {
@@ -170,7 +143,6 @@ async function fetchStores() {
     } catch(e) { console.error('Fetch Stores Error:', e); }
 }
 
-// 動態更新表單中的店別下拉選單
 function setupFormStoreSelect() {
     const formStoreSelect = document.getElementById('formStoreSelect');
     const blAddStore = document.getElementById('blacklist_addStore');
@@ -188,6 +160,7 @@ function setupFormStoreSelect() {
     }
     
     availableStores.forEach(s => {
+        if(s.name === '店名' || s.code === '店編號') return;
         const opt = document.createElement('option');
         opt.value = s.code;
         opt.textContent = `${s.code} - ${s.name}`;
