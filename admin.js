@@ -146,14 +146,12 @@ const longTerm_dataTableBody = document.getElementById('longTerm_data-table-body
 const longTerm_noDataText = document.getElementById('longTerm_noDataText');
 const longTerm_tableContainer = document.getElementById('longTerm_dataTableContainer');
 
-// 長期客訂的 Tag Controls 初始化
 const longTerm_editPurchaseCtrl = setupTagControls(document.getElementById('longTerm_editAddPurchase'), document.getElementById('longTerm_editStampPurchase'), document.getElementById('longTerm_editPurchaseInput'), document.getElementById('longTerm_editPurchaseTags'), document.getElementById('longTerm_editPurchaseHidden'));
 const longTerm_editArrivalCtrl = setupTagControls(document.getElementById('longTerm_editAddArrival'), document.getElementById('longTerm_editStampArrival'), document.getElementById('longTerm_editArrivalInput'), document.getElementById('longTerm_editArrivalTags'), document.getElementById('longTerm_editArrivalHidden'));
 const longTerm_editPickupCtrl = setupTagControls(document.getElementById('longTerm_editAddPickup'), document.getElementById('longTerm_editStampPickup'), document.getElementById('longTerm_editPickupInput'), document.getElementById('longTerm_editPickupTags'), document.getElementById('longTerm_editPickupHidden'));
 const longTerm_editMissedCtrl = setupTagControls(document.getElementById('longTerm_editAddMissed'), document.getElementById('longTerm_editStampMissed'), document.getElementById('longTerm_editMissedInput'), document.getElementById('longTerm_editMissedTags'), document.getElementById('longTerm_editMissedHidden'));
 const longTerm_editNotifyCtrl = setupTagControls(document.getElementById('longTerm_editAddNotify'), document.getElementById('longTerm_editStampNotify'), document.getElementById('longTerm_editNotifyInput'), document.getElementById('longTerm_editNotifyTags'), document.getElementById('longTerm_editNotifyHidden'));
 
-// 搜尋與重整
 document.getElementById('longTerm_searchButton')?.addEventListener('click', renderLongTermTable);
 document.getElementById('longTerm_searchInput')?.addEventListener('input', renderLongTermTable);
 document.getElementById('longTerm_refreshButton')?.addEventListener('click', () => {
@@ -280,7 +278,6 @@ function openLongTermEditModal(order) {
     if(longTermEditModal) longTermEditModal.classList.remove('hidden');
 }
 
-// 長期客訂表單提交
 document.getElementById('longTerm_editForm')?.addEventListener('submit', async(e)=>{ 
     e.preventDefault(); 
     const fd=new FormData(e.target); 
@@ -296,7 +293,6 @@ document.getElementById('longTerm_editForm')?.addEventListener('submit', async(e
     if(typeof fetchOrders === 'function') fetchOrders(); 
 });
 
-// 長期客訂刪除
 document.getElementById('longTerm_deleteEdit')?.addEventListener('click', ()=>{ 
     if(confirm('確定要刪除這筆長期客訂嗎？此動作無法復原。')) {
         deleteRow(document.getElementById('longTerm_editRowIndex').value); 
@@ -319,7 +315,7 @@ async function fetchBlacklistData() {
     try {
         const resp = await fetch(`${SCRIPT_URL}?action=blacklist`);
         const json = await resp.json();
-        allBlacklistData = json.rows || json.data || [];
+        allBlacklistData = json.rows || json.data || json.blacklist || [];
         renderBlacklistTable();
     } catch(e) { console.error(e); } finally { 
         if (loader) loader.classList.add('hidden'); 
@@ -336,25 +332,24 @@ function renderBlacklistTable() {
     tbody.innerHTML = '';
     const term = searchInput ? searchInput.value.trim().toLowerCase() : '';
     
-    // 1. 權限過濾
+    // 權限與名稱過濾修正
     let scopedData = allBlacklistData.filter(row => {
         const b = resolveBlacklistRowData(row);
         if (currentValidStoreType === 'STORE') {
-            return b.store === currentValidStoreValue;
+            const matchStore = allStoresCache.find(s => s.code === currentValidStoreValue);
+            return b.store === currentValidStoreValue || (matchStore && b.store === matchStore.name);
         } else if (currentValidStoreType === 'REGION') {
-            const storeObj = allStoresCache.find(s => s.code === b.store);
+            const storeObj = allStoresCache.find(s => s.code === b.store || s.name === b.store);
             return storeObj && storeObj.region === currentValidStoreValue;
         }
         return true; 
     });
 
-    // 2. 關鍵字過濾
     const filtered = scopedData.filter(row => {
         if(!term) return true;
         return Object.values(row).some(val => String(val).toLowerCase().includes(term));
     });
 
-    // 3. 排序: 新的在前
     filtered.sort((a, b) => {
         const dateA = new Date(resolveBlacklistRowData(a).date || 0).getTime();
         const dateB = new Date(resolveBlacklistRowData(b).date || 0).getTime();
@@ -381,7 +376,7 @@ function renderBlacklistTable() {
 
         let displayStoreName = data.store;
         if (allStoresCache && allStoresCache.length > 0) {
-            const match = allStoresCache.find(s => s.code === data.store);
+            const match = allStoresCache.find(s => s.code === data.store || s.name === data.store);
             if (match && match.name) displayStoreName = match.name;
         }
 
@@ -397,7 +392,6 @@ function renderBlacklistTable() {
           <td data-label="原因" class="px-4 py-3 text-red-600 font-medium">${data.reason || '-'}</td>
           <td data-label="日期" class="px-4 py-3 text-sm text-gray-500">${dateVal}</td>
         `;
-        
         tbody.appendChild(tr);
     });
 }
@@ -467,7 +461,6 @@ function populateBlacklistStoreSelect() {
     }
 }
 
-// 黑名單相關事件監聽
 document.getElementById('blacklist_searchButton')?.addEventListener('click', renderBlacklistTable);
 document.getElementById('blacklist_searchInput')?.addEventListener('input', renderBlacklistTable);
 
@@ -527,45 +520,46 @@ const notifyToggle = document.getElementById('notifyToggle');
 const notifyLongTermToggle = document.getElementById('notifyLongTermToggle');
 
 async function checkStoreSettings() {
-    const store = storeSelect.value;
-    if(!store) {
-        if(storeLockCheckbox) storeLockCheckbox.checked = false;
-        if(notifyToggle) {
-            notifyToggle.checked = false;
-            notifyToggle.disabled = true; 
-        }
-        if (notifyLongTermToggle) {
-            notifyLongTermToggle.checked = false;
-            notifyLongTermToggle.disabled = true;
-        }
-        return;
-    }
-    
-    const storeName = getSelectedStoreName();
-    if(!storeName) return;
-
-    if(notifyToggle) notifyToggle.disabled = false; 
-    if(notifyLongTermToggle) notifyLongTermToggle.disabled = false;
-    
     try {
+        if (!storeSelect || storeSelect.selectedIndex < 0) return;
+        const selectedOption = storeSelect.options[storeSelect.selectedIndex];
+        if (!selectedOption || !selectedOption.value) {
+            if(storeLockCheckbox) storeLockCheckbox.checked = false;
+            if(notifyToggle) { notifyToggle.checked = false; notifyToggle.disabled = true; }
+            if(notifyLongTermToggle) { notifyLongTermToggle.checked = false; notifyLongTermToggle.disabled = true; }
+            return;
+        }
+
+        const storeCode = selectedOption.dataset.value;
+        if (!storeCode) return;
+        const store = allStoresCache.find(s => s.code === storeCode);
+        if (!store) { console.warn('找不到店資料:', storeCode); return; }
+
+        const isLocked = store.locked === true || store.locked === 'true' || store.locked === '1';
+        if (storeLockCheckbox) storeLockCheckbox.checked = isLocked;
+
+        if (isLocked) {
+            storeSelect.classList.add('select-disabled');
+            if(typeof showTopMessage === 'function') showTopMessage('店別已鎖定', false);
+        } else {
+            storeSelect.classList.remove('select-disabled');
+            if(typeof showTopMessage === 'function') showTopMessage('', false);
+        }
+        
+        const storeName = store.name || storeCode;
+        if(notifyToggle) notifyToggle.disabled = false; 
+        if(notifyLongTermToggle) notifyLongTermToggle.disabled = false;
+        
+        // 抓取通知狀態設定
         const resp = await fetch(`${SCRIPT_URL}?action=get_store_settings&store=${encodeURIComponent(storeName)}`);
         const json = await resp.json();
         if (json.result === 'success') {
-            if(storeLockCheckbox) storeLockCheckbox.checked = (json.settings.locked === '1');
             if(notifyToggle) notifyToggle.checked = (json.settings.notify_enabled === '1');
             if(notifyLongTermToggle) notifyLongTermToggle.checked = (json.settings.notify_long_term === '1');
-            
-            if(json.settings.locked === '1') {
-                storeSelect.classList.add('select-disabled');
-                storeSelect.disabled = true;
-                if(typeof showTopMessage === 'function') showTopMessage('店別已鎖定', false);
-            } else {
-                storeSelect.classList.remove('select-disabled');
-                storeSelect.disabled = false;
-                if(typeof showTopMessage === 'function') showTopMessage('', false);
-            }
         }
-    } catch(err) { console.warn('checkStoreSettings error', err); }
+    } catch (e) {
+        console.error('checkStoreSettings error:', e);
+    }
 }
 
 async function setStoreLockValue(locked){
@@ -592,23 +586,16 @@ if(storeLockCheckbox) {
         }
         if(locked){
             storeSelect.classList.add('select-disabled');
-            storeSelect.disabled = true;
         } else {
             storeSelect.classList.remove('select-disabled');
-            storeSelect.disabled = false;
         }
         if(typeof showTopMessage === 'function') showTopMessage(locked ? '店別已鎖定' : '店別已解鎖', false);
         const ok = await setStoreLockValue(locked);
         if(!ok){
             if(typeof showTopMessage === 'function') showTopMessage('設定店別鎖定失敗，已還原狀態', true);
             storeLockCheckbox.checked = !locked;
-            if(!locked){ 
-                storeSelect.classList.add('select-disabled');
-                storeSelect.disabled = true;
-            } else {
-                storeSelect.classList.remove('select-disabled');
-                storeSelect.disabled = false;
-            }
+            if(!locked) storeSelect.classList.add('select-disabled');
+            else storeSelect.classList.remove('select-disabled');
         }
     });
 }
@@ -672,7 +659,6 @@ if (notifyLongTermToggle) {
     });
 }
 
-
 // ==========================================
 // 4. 資料備份與清理 (Backup & Clean)
 // ==========================================
@@ -680,7 +666,6 @@ const backupModalBackdrop = document.getElementById('backupModalBackdrop');
 const backupModalContent = document.getElementById('backupModalContent');
 const confirmBackupBtn = document.getElementById('confirmBackupBtn');
 
-// 重整分店
 document.getElementById('refreshStoresBtn')?.addEventListener('click', async()=>{ 
     const fd = new FormData();
     fd.append('action','create_store_sheets');
@@ -688,7 +673,6 @@ document.getElementById('refreshStoresBtn')?.addEventListener('click', async()=>
     if(typeof fetchStores === 'function') await fetchStores(); 
 });
 
-// 備份按鈕
 document.getElementById('backupBtn')?.addEventListener('click', () => {
     const store = storeSelect.value;
     const storeName = getSelectedStoreName();
@@ -762,7 +746,6 @@ if(confirmBackupBtn) {
     });
 }
 
-// 清除逾期
 document.getElementById('clearOverdueBtn')?.addEventListener('click', async () => {
     const store = storeSelect.value;
     if (!store) {
@@ -793,4 +776,18 @@ document.getElementById('clearOverdueBtn')?.addEventListener('click', async () =
         btn.disabled = false;
         btn.textContent = '清除逾期';
     }
+});
+
+// ==========================================
+// 5. 事件綁定 (Global Event Listeners)
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    if (storeSelect) storeSelect.addEventListener('change', () => setTimeout(() => { checkStoreSettings(); renderBlacklistTable(); }, 300));
+    if (regionSelect) regionSelect.addEventListener('change', () => setTimeout(() => { renderBlacklistTable(); }, 300));
+    
+    setTimeout(() => {
+        if (typeof allStoresCache !== 'undefined' && allStoresCache.length > 0) {
+            checkStoreSettings();
+        }
+    }, 500);
 });
