@@ -1,4 +1,144 @@
 // ==========================================
+// 0. 共用工具與一般訂單編輯 (Regular Orders)
+// ==========================================
+function setInputDate(id, val) {
+    const el = document.getElementById(id);
+    if(el) el.value = toDateOnly(val) || '';
+}
+
+function parseMultiDateStringToArray(val) {
+    if(!val) return [];
+    return String(val).split(/[,;，\s]+/).filter(Boolean);
+}
+
+function renderStoreTransferTags(val) {
+    const container = document.getElementById('storeTransferOptions');
+    if(!container) return;
+    container.innerHTML = '';
+    if(!val) return;
+    const tag = document.createElement('span');
+    tag.className = 'tag bg-indigo-50 text-indigo-700 border-indigo-200';
+    tag.innerHTML = `${val} <span class="remove cursor-pointer text-red-500 ml-1 font-bold">&times;</span>`;
+    tag.querySelector('.remove').addEventListener('click', () => {
+        document.getElementById('editStoreTransfer').value = '';
+        renderStoreTransferTags('');
+    });
+    container.appendChild(tag);
+}
+
+const editModal = document.getElementById('editModalBackdrop');
+const editMissedCtrl = setupTagControls(document.getElementById('editAddMissed'), document.getElementById('editStampMissed'), document.getElementById('editMissedInput'), document.getElementById('editMissedTags'), document.getElementById('editMissedHidden'));
+const editNotifyCtrl = setupTagControls(document.getElementById('editAddNotify'), document.getElementById('editStampNotify'), document.getElementById('editNotifyInput'), document.getElementById('editNotifyTags'), document.getElementById('editNotifyHidden'));
+
+const tStoreInput = document.getElementById('editTransferStoreInput');
+const tDateInput = document.getElementById('editTransferDateInput');
+const tHiddenInput = document.getElementById('editStoreTransfer');
+
+function updateStoreTransfer() {
+    if(tStoreInput && tDateInput && tStoreInput.value && tDateInput.value) {
+        const val = `${tStoreInput.value} (${tDateInput.value})`;
+        if(tHiddenInput) tHiddenInput.value = val;
+        renderStoreTransferTags(val);
+        tStoreInput.value = '';
+        tDateInput.value = '';
+    }
+}
+tStoreInput?.addEventListener('change', updateStoreTransfer);
+tDateInput?.addEventListener('change', updateStoreTransfer);
+
+window.deleteRow = async function(rowIdx) {
+    try {
+        const fd = new FormData();
+        fd.append('action', 'delete');
+        fd.append('row', rowIdx);
+        fd.append('store', storeSelect.value);
+        await fetch(SCRIPT_URL, { method: 'POST', body: fd });
+        alert('刪除成功');
+        if(editModal) editModal.classList.add('hidden');
+        if(document.getElementById('longTerm_editModalBackdrop')) document.getElementById('longTerm_editModalBackdrop').classList.add('hidden');
+        if(typeof fetchOrders === 'function') fetchOrders();
+    } catch(err) {
+        alert('刪除失敗');
+    }
+};
+
+window.openEditModal = function(order) {
+    document.getElementById('editRowIndex').value = order['__row'];
+    document.getElementById('editCustomerID').value = order['客號'] || '';
+    document.getElementById('editCustomerName').value = order['姓名'] || '';
+    document.getElementById('editPhone').value = order['電話'] || order['連絡電話'] || '';
+    document.getElementById('editLineNotify').checked = isChecked(order['Line通知']);
+    document.getElementById('editLineName').value = order['LINE名稱'] || '';
+
+    document.getElementById('editProductAName').value = order['客訂商品A'] || '';
+    document.getElementById('editProductAOutStock').checked = isChecked(order['A缺貨']);
+    document.getElementById('editProductAQty').value = order['A數量'] || '';
+    document.getElementById('editProductASpec').value = order['A商品規格'] || '';
+
+    document.getElementById('editProductBName').value = order['客訂商品B'] || '';
+    document.getElementById('editProductBOutStock').checked = isChecked(order['B缺貨']);
+    document.getElementById('editProductBQty').value = order['B數量'] || '';
+    document.getElementById('editProductBSpec').value = order['B商品規格'] || '';
+
+    if(tHiddenInput) tHiddenInput.value = order['分店調撥'] || '';
+    if(tStoreInput) tStoreInput.value = '';
+    if(tDateInput) tDateInput.value = '';
+    renderStoreTransferTags(order['分店調撥']);
+
+    setInputDate('editPurchaseDate', order['採購日期']);
+    setInputDate('editArrivalDate', order['到貨日期']);
+    setInputDate('editPickupDate', order['取走日期']);
+    setInputDate('editOutStockDate', order['缺貨通知日期']);
+
+    try {
+        editMissedCtrl.setItems(parseMultiDateStringToArray(order['未接電話日期']));
+        editNotifyCtrl.setItems(parseMultiDateStringToArray(order['通知日期']));
+    } catch(e) { console.warn(e); }
+
+    document.getElementById('editPaid').checked = isChecked(order['付清']);
+    document.getElementById('editNotes').value = order['備註'] || order['說明'] || '';
+
+    if(editModal) editModal.classList.remove('hidden');
+};
+
+document.getElementById('editForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    if (!document.getElementById('editProductAOutStock').checked) fd.append('A缺貨', '');
+    if (!document.getElementById('editProductBOutStock').checked) fd.append('B缺貨', '');
+    if (!document.getElementById('editLineNotify').checked) fd.append('Line通知', '');
+    if (!document.getElementById('editPaid').checked) fd.append('付清', '');
+
+    fd.append('action', 'update');
+    fd.append('store', storeSelect.value);
+
+    try {
+        await fetch(SCRIPT_URL, { method: 'POST', body: fd });
+        alert('更新成功');
+        if(editModal) editModal.classList.add('hidden');
+        if (typeof fetchOrders === 'function') fetchOrders();
+    } catch(err) {
+        alert('更新失敗');
+    }
+});
+
+document.getElementById('deleteEdit')?.addEventListener('click', () => {
+    if (confirm('確定要刪除這筆訂單嗎？此動作無法復原。')) {
+        deleteRow(document.getElementById('editRowIndex').value);
+    }
+});
+
+document.getElementById('closeEditModal')?.addEventListener('click', () => {
+    if(editModal) editModal.classList.add('hidden');
+});
+
+document.getElementById('clearStoreTransfer')?.addEventListener('click', () => {
+    if(tHiddenInput) tHiddenInput.value = '';
+    renderStoreTransferTags('');
+});
+
+
+// ==========================================
 // 1. 長期客訂 (Long Term Orders)
 // ==========================================
 const longTermEditModal = document.getElementById('longTerm_editModalBackdrop');
@@ -13,31 +153,30 @@ const longTerm_editPickupCtrl = setupTagControls(document.getElementById('longTe
 const longTerm_editMissedCtrl = setupTagControls(document.getElementById('longTerm_editAddMissed'), document.getElementById('longTerm_editStampMissed'), document.getElementById('longTerm_editMissedInput'), document.getElementById('longTerm_editMissedTags'), document.getElementById('longTerm_editMissedHidden'));
 const longTerm_editNotifyCtrl = setupTagControls(document.getElementById('longTerm_editAddNotify'), document.getElementById('longTerm_editStampNotify'), document.getElementById('longTerm_editNotifyInput'), document.getElementById('longTerm_editNotifyTags'), document.getElementById('longTerm_editNotifyHidden'));
 
-// 手風琴初始化
-toggleAccordion(document.getElementById('longTermToggleBtn'), document.getElementById('longTermContent'), document.getElementById('longTermArrowIcon'));
-
 // 搜尋與重整
-document.getElementById('longTerm_searchButton').addEventListener('click', renderLongTermTable);
-document.getElementById('longTerm_searchInput').addEventListener('input', renderLongTermTable);
-document.getElementById('longTerm_refreshButton').addEventListener('click', () => {
+document.getElementById('longTerm_searchButton')?.addEventListener('click', renderLongTermTable);
+document.getElementById('longTerm_searchInput')?.addEventListener('input', renderLongTermTable);
+document.getElementById('longTerm_refreshButton')?.addEventListener('click', () => {
     if(typeof fetchOrders === 'function') fetchOrders(); 
 });
 
 function renderLongTermTableHeaders(displayHeaders){
-    if(!longTerm_dataTableHeaders) return;
-    longTerm_dataTableHeaders.innerHTML = '';
+    const headersContainer = document.getElementById('longTerm_data-table-headers');
+    if(!headersContainer) return;
+    headersContainer.innerHTML = '';
     const headers = ['狀態', ...displayHeaders];
     headers.forEach(h=>{
       const th = document.createElement('th');
       th.className = 'sticky top-0 z-30 bg-gray-100 text-gray-900 font-bold px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap';
       th.textContent = h;
-      longTerm_dataTableHeaders.appendChild(th);
+      headersContainer.appendChild(th);
     });
 }
 
 function renderLongTermTable() {
+    if(!longTerm_dataTableBody) return;
     longTerm_dataTableBody.innerHTML = '';
-    const term = document.getElementById('longTerm_searchInput').value.trim().toLowerCase();
+    const term = document.getElementById('longTerm_searchInput')?.value.trim().toLowerCase() || '';
     
     let filtered = allLongTermOrders.filter(o => {
         if (!term) return true;
@@ -45,12 +184,12 @@ function renderLongTermTable() {
     });
     
     if(filtered.length === 0) { 
-        longTerm_noDataText.classList.remove('hidden'); 
-        longTerm_tableContainer.classList.add('hidden');
+        if(longTerm_noDataText) longTerm_noDataText.classList.remove('hidden'); 
+        if(longTerm_tableContainer) longTerm_tableContainer.classList.add('hidden');
         return; 
     } else { 
-        longTerm_noDataText.classList.add('hidden'); 
-        longTerm_tableContainer.classList.remove('hidden');
+        if(longTerm_noDataText) longTerm_noDataText.classList.add('hidden'); 
+        if(longTerm_tableContainer) longTerm_tableContainer.classList.remove('hidden');
     }
     
     filtered.forEach(order => {
@@ -124,30 +263,25 @@ function openLongTermEditModal(order) {
     document.getElementById('longTerm_editProductBSpec').value = order['B商品規格']||'';
     document.getElementById('longTerm_editProductBQty').value = order['B數量']||'';
     
-    document.getElementById('longTerm_editPaid').checked = (order['paid'] === '是' || order['paid'] === true || order['付清'] === '是');
+    document.getElementById('longTerm_editPaid').checked = isChecked(order['paid'] || order['付清']);
     document.getElementById('longTerm_editStoreTransfer').value = order['分店調撥'] || '';
     document.getElementById('longTerm_editNotes').value = order['備註'] || order['說明'] || '';
     
     setInputDate('longTerm_editOutStockInput', order['缺貨通知日期']);
     
     try{
-        const purchase = parseMultiDateStringToArray(order['採購日期']);
-        const arrival = parseMultiDateStringToArray(order['到貨日期']);
-        const pickup = parseMultiDateStringToArray(order['取走日期']);
-        const missed = parseMultiDateStringToArray(order['未接電話日期']);
-        const notify = parseMultiDateStringToArray(order['通知日期']);
-        longTerm_editPurchaseCtrl.setItems(purchase);
-        longTerm_editArrivalCtrl.setItems(arrival);
-        longTerm_editPickupCtrl.setItems(pickup);
-        longTerm_editMissedCtrl.setItems(missed);
-        longTerm_editNotifyCtrl.setItems(notify);
+        longTerm_editPurchaseCtrl.setItems(parseMultiDateStringToArray(order['採購日期']));
+        longTerm_editArrivalCtrl.setItems(parseMultiDateStringToArray(order['到貨日期']));
+        longTerm_editPickupCtrl.setItems(parseMultiDateStringToArray(order['取走日期']));
+        longTerm_editMissedCtrl.setItems(parseMultiDateStringToArray(order['未接電話日期']));
+        longTerm_editNotifyCtrl.setItems(parseMultiDateStringToArray(order['通知日期']));
     }catch(e){ console.warn(e); }
 
-    longTermEditModal.classList.remove('hidden');
+    if(longTermEditModal) longTermEditModal.classList.remove('hidden');
 }
 
 // 長期客訂表單提交
-document.getElementById('longTerm_editForm').addEventListener('submit', async(e)=>{ 
+document.getElementById('longTerm_editForm')?.addEventListener('submit', async(e)=>{ 
     e.preventDefault(); 
     const fd=new FormData(e.target); 
     
@@ -158,24 +292,25 @@ document.getElementById('longTerm_editForm').addEventListener('submit', async(e)
     fd.append('store',storeSelect.value); 
     await fetch(SCRIPT_URL,{method:'POST',body:fd}); 
     alert('更新成功'); 
-    longTermEditModal.classList.add('hidden'); 
+    if(longTermEditModal) longTermEditModal.classList.add('hidden'); 
     if(typeof fetchOrders === 'function') fetchOrders(); 
 });
 
 // 長期客訂刪除
-document.getElementById('longTerm_deleteEdit').addEventListener('click', ()=>{ 
-    if(confirm('刪除?')) {
-        if(typeof deleteRow === 'function') deleteRow(document.getElementById('longTerm_editRowIndex').value); 
+document.getElementById('longTerm_deleteEdit')?.addEventListener('click', ()=>{ 
+    if(confirm('確定要刪除這筆長期客訂嗎？此動作無法復原。')) {
+        deleteRow(document.getElementById('longTerm_editRowIndex').value); 
     }
 });
 
-document.getElementById('longTerm_closeEditModal').addEventListener('click', () => longTermEditModal.classList.add('hidden'));
+document.getElementById('longTerm_closeEditModal')?.addEventListener('click', () => {
+    if(longTermEditModal) longTermEditModal.classList.add('hidden');
+});
 
 
 // ==========================================
 // 2. 黑名單管理 (Blacklist)
 // ==========================================
-toggleAccordion(document.getElementById('blacklistToggleBtn'), document.getElementById('blacklistContent'), document.getElementById('blacklistArrowIcon'));
 const blacklistEditModal = document.getElementById('blacklist_editModalBackdrop');
 
 async function fetchBlacklistData() {
@@ -284,7 +419,7 @@ function openBlacklistEditModal(row) {
     const storeField = document.getElementById('bl_edit_store');
     if (storeField) storeField.value = data.store || '';
     
-    blacklistEditModal.classList.remove('hidden');
+    if(blacklistEditModal) blacklistEditModal.classList.remove('hidden');
 }
 
 async function deleteBlacklistRow(rowIndex) {
@@ -343,8 +478,8 @@ document.getElementById('blacklist_addButton')?.addEventListener('click', () => 
 
 document.getElementById('blacklist_closeAddModal')?.addEventListener('click', () => document.getElementById('blacklist_addModalBackdrop').classList.add('hidden'));
 document.getElementById('blacklist_cancelAdd')?.addEventListener('click', () => document.getElementById('blacklist_addModalBackdrop').classList.add('hidden'));
-document.getElementById('blacklist_closeEditModal')?.addEventListener('click', () => blacklistEditModal.classList.add('hidden'));
-document.getElementById('blacklist_cancelEdit')?.addEventListener('click', () => blacklistEditModal.classList.add('hidden'));
+document.getElementById('blacklist_closeEditModal')?.addEventListener('click', () => { if(blacklistEditModal) blacklistEditModal.classList.add('hidden'); });
+document.getElementById('blacklist_cancelEdit')?.addEventListener('click', () => { if(blacklistEditModal) blacklistEditModal.classList.add('hidden'); });
 
 document.getElementById('blacklist_addForm')?.addEventListener('submit', async(e)=>{
     e.preventDefault();
@@ -379,7 +514,7 @@ document.getElementById('blacklist_editForm')?.addEventListener('submit', async(
     fd.append('targetSheet','blacklist'); 
     await fetch(SCRIPT_URL,{method:'POST',body:fd}); 
     alert('更新成功'); 
-    blacklistEditModal.classList.add('hidden'); 
+    if(blacklistEditModal) blacklistEditModal.classList.add('hidden'); 
     fetchBlacklistData(); 
 });
 
@@ -578,8 +713,12 @@ document.getElementById('backupBtn')?.addEventListener('click', () => {
     if(backupModalBackdrop) backupModalBackdrop.classList.remove('hidden');
 });
 
-document.getElementById('closeBackupModal')?.addEventListener('click', () => backupModalBackdrop.classList.add('hidden'));
-document.getElementById('cancelBackupBtn')?.addEventListener('click', () => backupModalBackdrop.classList.add('hidden'));
+document.getElementById('closeBackupModal')?.addEventListener('click', () => {
+    if(backupModalBackdrop) backupModalBackdrop.classList.add('hidden');
+});
+document.getElementById('cancelBackupBtn')?.addEventListener('click', () => {
+    if(backupModalBackdrop) backupModalBackdrop.classList.add('hidden');
+});
 
 if(confirmBackupBtn) {
     confirmBackupBtn.addEventListener('click', async () => {
@@ -610,7 +749,7 @@ if(confirmBackupBtn) {
             const json = await resp.json();
             if (json.result === 'success') {
                 alert(json.message || '備份成功！');
-                backupModalBackdrop.classList.add('hidden');
+                if(backupModalBackdrop) backupModalBackdrop.classList.add('hidden');
             } else {
                 alert('備份失敗：' + (json.error || '未知錯誤'));
             }
