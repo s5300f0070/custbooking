@@ -125,8 +125,22 @@ function resolveBlacklistRowData(row) {
 }
 
 /**
+ * 初始化區域下拉選單
+ */
+function populateRegions(stores) {
+    const regions = [...new Set(stores.map(s => s.region).filter(Boolean))];
+    regionSelect.innerHTML = '<option value="">請選擇區域</option>';
+    regions.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        regionSelect.appendChild(opt);
+    });
+}
+
+/**
  * 安全驗證密碼
- * 修正：將動作改為 verify_store_password 以對接後端正確功能
+ * 修正：將動作改為 verify_store_password 並儲存授權範圍
  */
 async function verifyAdminPassword(inputPwd, storeCode = '') {
     if (!inputPwd) return false;
@@ -138,7 +152,12 @@ async function verifyAdminPassword(inputPwd, storeCode = '') {
         
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
         const json = await resp.json();
-        return json.result === 'success';
+        if (json.result === 'success') {
+            currentValidStoreType = json.scope;
+            currentValidStoreValue = json.authorizedValue;
+            return true;
+        }
+        return false;
     } catch (e) {
         console.error('Verify password error:', e);
         return false;
