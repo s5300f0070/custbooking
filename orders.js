@@ -7,6 +7,7 @@ window.addEventListener('load', async () => {
     await fetchStores();
     await fetchOrders(); 
     if(typeof fetchBlacklistData === 'function') fetchBlacklistData();
+    updateRegionManagerBtnUI();
 });
 
 function toggleBackupBtn() {
@@ -17,6 +18,22 @@ function toggleBackupBtn() {
         } else {
             backupBtn.classList.add('hidden');
         }
+    }
+}
+
+// 根據目前權限狀態，更新區經理按鈕的外觀與文字
+function updateRegionManagerBtnUI() {
+    const btn = document.getElementById('regionManagerBtn');
+    if (!btn) return;
+    
+    if (currentValidStoreType === 'REGION') {
+        btn.innerHTML = '🚪 離開區經理';
+        btn.classList.remove('bg-purple-50', 'text-purple-700', 'border-purple-200', 'hover:bg-purple-100');
+        btn.classList.add('bg-red-50', 'text-red-700', 'border-red-200', 'hover:bg-red-100');
+    } else {
+        btn.innerHTML = '👑 區經理模式';
+        btn.classList.remove('bg-red-50', 'text-red-700', 'border-red-200', 'hover:bg-red-100');
+        btn.classList.add('bg-purple-50', 'text-purple-700', 'border-purple-200', 'hover:bg-purple-100');
     }
 }
 
@@ -53,6 +70,7 @@ if (regionSelect) {
         currentValidStoreValue = '';
         updateStoreDisplay();
         toggleBackupBtn();
+        updateRegionManagerBtnUI();
         
         allOrders = [];
         allLongTermOrders = [];
@@ -116,6 +134,7 @@ async function fetchStores() {
                     updateStoreDisplay(); 
                     setupFormStoreSelect();
                     toggleBackupBtn();
+                    updateRegionManagerBtnUI();
                 }
             }
         }
@@ -127,7 +146,12 @@ storeSelect.addEventListener('change', async () => {
     const selectedOption = storeSelect.options[storeSelect.selectedIndex];
     if (!selectedOption || !selectedOption.value) {
         previousStoreSelectValue = ''; currentValidStoreType = 'ALL'; currentValidStoreValue = '';
-        localStorage.removeItem('selected_store_value'); updateStoreDisplay(); fetchOrders(); toggleBackupBtn(); return;
+        localStorage.removeItem('selected_store_value'); 
+        updateStoreDisplay(); 
+        fetchOrders(); 
+        toggleBackupBtn(); 
+        updateRegionManagerBtnUI();
+        return;
     }
 
     if (selectedOption.dataset.type === 'REGION') return;
@@ -159,6 +183,7 @@ storeSelect.addEventListener('change', async () => {
             setupFormStoreSelect();
             if(typeof checkStoreSettings === 'function') checkStoreSettings();
             toggleBackupBtn();
+            updateRegionManagerBtnUI();
             
             fetchOrders();
         } else {
@@ -220,7 +245,7 @@ function renderTable() {
     
     if(filtered.length === 0) { 
         if (noDataText) {
-            noDataText.textContent = (currentValidStoreType === 'ALL') ? '請先於上方選擇店別以查看訂單' : '沒有找到符合的訂單';
+            noDataText.textContent = (currentValidStoreType === 'ALL') ? '請先於上方選擇店別或區經理模式以查看訂單' : '沒有找到符合的訂單';
             noDataText.classList.remove('hidden'); 
         }
         tableContainer && tableContainer.classList.add('hidden'); 
@@ -323,6 +348,33 @@ window.setFilter = (key) => { currentFilter = key; renderTabs(); renderTable(); 
 const regionManagerBtn = document.getElementById('regionManagerBtn');
 if (regionManagerBtn) {
     regionManagerBtn.addEventListener('click', async () => {
+        // 若已經是區經理模式，點擊則執行離開邏輯
+        if (currentValidStoreType === 'REGION') {
+            if (!confirm('確定要離開區經理模式嗎？')) return;
+            
+            currentValidStoreType = 'ALL';
+            currentValidStoreValue = '';
+            previousStoreSelectValue = '';
+            localStorage.removeItem('selected_store_value');
+            localStorage.removeItem('auth_type');
+            localStorage.removeItem('auth_value');
+            
+            storeSelect.value = '';
+            regionSelect.value = '';
+            populateStoreSelect('');
+            
+            updateStoreDisplay();
+            if (typeof setupFormStoreSelect === 'function') setupFormStoreSelect();
+            if (typeof checkStoreSettings === 'function') checkStoreSettings();
+            toggleBackupBtn();
+            updateRegionManagerBtnUI();
+            fetchOrders();
+            
+            alert('已成功離開區經理模式。');
+            return;
+        }
+
+        // 若不是區經理模式，則執行登入邏輯
         const region = regionSelect ? regionSelect.value : '';
         if (!region) {
             alert('請先於左側下拉選單選擇要查看的「區域」！');
@@ -372,6 +424,7 @@ if (regionManagerBtn) {
                 if (typeof setupFormStoreSelect === 'function') setupFormStoreSelect();
                 if (typeof checkStoreSettings === 'function') checkStoreSettings();
                 toggleBackupBtn();
+                updateRegionManagerBtnUI();
                 
                 alert(`區經理驗證成功！已進入【${currentValidStoreValue}】全區模式。`);
                 fetchOrders();
