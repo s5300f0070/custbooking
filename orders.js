@@ -22,7 +22,7 @@ const editModal = document.getElementById('editModalBackdrop');
 const orderForm = document.getElementById('orderForm');
 const submitButton = document.getElementById('submitButton');
 
-// 記錄先前有效的下拉選單值，用於驗證失敗時還原
+// 記錄先前有效的下拉選單值
 let previousStoreSelectValue = '';
 
 window.addEventListener('load', async () => {
@@ -63,6 +63,7 @@ function populateStoreSelect(region) {
         opt.dataset.type = 'STORE';
         opt.dataset.value = s.code;
         opt.dataset.name = s.name || s.code;
+        opt.dataset.region = s.region || 'OTHER'; // 儲存所屬區域供驗證使用
         opt.textContent = `🏠 ${s.code} - ${s.name}`;
         storeSelect.appendChild(opt);
     });
@@ -73,6 +74,7 @@ if (regionSelect) {
     regionSelect.addEventListener('change', () => {
         populateStoreSelect(regionSelect.value);
         
+        // 切換區域時重置狀態，但不觸發密碼輸入
         storeSelect.value = '';
         previousStoreSelectValue = '';
         currentValidStoreType = 'ALL';
@@ -80,25 +82,22 @@ if (regionSelect) {
         updateStoreDisplay();
         setupFormStoreSelect();
         
-        if (typeof renderTable === 'function') {
-            allOrders = [];
-            allLongTermOrders = [];
-            renderTable();
-            if (typeof renderLongTermTable === 'function') renderLongTermTable();
-        }
+        allOrders = [];
+        allLongTermOrders = [];
+        renderTable();
+        if (typeof renderLongTermTable === 'function') renderLongTermTable();
     });
 }
 
 async function fetchStores() {
     try {
-        const resp = await fetch(`${SCRIPT_URL}?action=stores`);
+        const resp = await fetch(`${SCRIPT_URL}?action=stores&t=${new Date().getTime()}`);
         const json = await resp.json();
         const stores = json.stores || [];
         allStoresCache = stores; 
 
         if (regionSelect) {
             regionSelect.innerHTML = '<option value="">請選擇區域</option>';
-
             const regions = [...new Set(stores.map(s => s.region).filter(Boolean))];
             regions.forEach(r => {
                 regionSelect.innerHTML += `<option value="${r}">📍 ${r}</option>`;
@@ -127,9 +126,9 @@ async function fetchStores() {
                     storeSelect.value = savedVal; 
                     previousStoreSelectValue = savedVal;
                     
-                    const opt = storeSelect.options[storeSelect.selectedIndex];
-                    currentValidStoreType = opt.dataset.type || 'ALL';
-                    currentValidStoreValue = opt.dataset.value || '';
+                    // 恢復時設定目前生效的資料範圍
+                    currentValidStoreType = localStorage.getItem('auth_type') || 'STORE';
+                    currentValidStoreValue = localStorage.getItem('auth_value') || savedVal.replace('STORE_', '');
                     
                     updateStoreDisplay(); 
                     setupFormStoreSelect();
@@ -144,13 +143,13 @@ async function fetchStores() {
 function setupFormStoreSelect() {
     const formStoreSelect = document.getElementById('formStoreSelect');
     const blAddStore = document.getElementById('blacklist_addStore');
-    
     if(!formStoreSelect) return;
     
     formStoreSelect.innerHTML = '<option value="">請選擇建檔店別</option>';
     if(blAddStore) blAddStore.innerHTML = '<option value="">請選擇提報店別</option>';
     
     let availableStores = allStoresCache;
+    // 如果是區經理授權，表單選單僅顯示該區分店
     if (currentValidStoreType === 'REGION') {
         availableStores = allStoresCache.filter(s => s.region === currentValidStoreValue);
     } else if (currentValidStoreType === 'STORE') {
@@ -170,18 +169,9 @@ function setupFormStoreSelect() {
         formStoreSelect.value = currentValidStoreValue;
         formStoreSelect.style.pointerEvents = 'none';
         formStoreSelect.classList.add('bg-gray-100');
-        if(blAddStore) {
-            blAddStore.value = currentValidStoreValue;
-            blAddStore.style.pointerEvents = 'none';
-            blAddStore.classList.add('bg-gray-100');
-        }
     } else {
         formStoreSelect.style.pointerEvents = 'auto';
         formStoreSelect.classList.remove('bg-gray-100');
-        if(blAddStore) {
-            blAddStore.style.pointerEvents = 'auto';
-            blAddStore.classList.remove('bg-gray-100');
-        }
     }
 }
 
@@ -192,18 +182,17 @@ storeSelect.addEventListener('change', async () => {
         previousStoreSelectValue = '';
         currentValidStoreType = 'ALL';
         currentValidStoreValue = '';
-        localStorage.removeItem('selected_store_value');
         updateStoreDisplay();
         setupFormStoreSelect();
         fetchOrders();
         return;
     }
 
-    const targetType = selectedOption.dataset.type;
-    const targetValue = selectedOption.dataset.value;
-    const targetName = selectedOption.textContent.replace(/^[🌟📍📁🏠]\s*/, '');
+    const storeCode = selectedOption.dataset.value;
+    const storeName = selectedOption.textContent.replace(/^[🌟📍📁🏠]\s*/, '');
+    const storeRegion = selectedOption.dataset.region;
 
-    const input = prompt(`您即將切換至：${targetName}\n\n為確保安全性，請輸入該店的【密碼】：`);
+    const input = prompt(`請輸入 ${storeName} 的店密碼，\n或輸入【區經理代碼】查看該區域所有訂單：`);
 
     if (!input) { 
         storeSelect.value = previousStoreSelectValue; 
@@ -212,38 +201,43 @@ storeSelect.addEventListener('change', async () => {
 
     submitButton.disabled = true; 
     
-    // 向後端驗證密碼
-    let isVerified = false;
     try {
         const fd = new FormData();
         fd.append('action', 'verify_store_password');
-        fd.append('storeCode', targetValue);
+        fd.append('storeCode', storeCode);
         fd.append('password', input.trim());
         
         const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
         const json = await resp.json();
+
         if (json.result === 'success') {
-            isVerified = true;
+            // 設定權限範圍：'STORE' 或 'REGION'
+            currentValidStoreType = json.scope; 
+            currentValidStoreValue = json.authorizedValue;
+            previousStoreSelectValue = selectedOption.value;
+            
+            localStorage.setItem('selected_store_value', selectedOption.value);
+            localStorage.setItem('auth_type', currentValidStoreType);
+            localStorage.setItem('auth_value', currentValidStoreValue);
+
+            updateStoreDisplay();
+            setupFormStoreSelect();
+            if(typeof checkStoreSettings === 'function') checkStoreSettings();
+            
+            if (json.scope === 'REGION') {
+                alert(`區經理驗證成功！已解鎖【${storeRegion}】區域所有資料。`);
+            }
+            fetchOrders();
+        } else {
+            alert('驗證失敗：密碼或代碼錯誤。');
+            storeSelect.value = previousStoreSelectValue; 
         }
     } catch (e) {
         console.error(e);
-    }
-
-    submitButton.disabled = false;
-
-    if (isVerified) {
-        previousStoreSelectValue = selectedOption.value;
-        currentValidStoreType = targetType;
-        currentValidStoreValue = targetValue;
-        
-        localStorage.setItem('selected_store_value', selectedOption.value);
-        updateStoreDisplay();
-        setupFormStoreSelect();
-        if(typeof checkStoreSettings === 'function') checkStoreSettings();
-        fetchOrders();
-    } else {
-        alert('驗證失敗 (密碼錯誤)，還原至上一個選擇。');
-        storeSelect.value = previousStoreSelectValue; 
+        alert('連線失敗，請檢查網路。');
+        storeSelect.value = previousStoreSelectValue;
+    } finally {
+        submitButton.disabled = false;
     }
 });
 
@@ -253,6 +247,7 @@ async function fetchOrders() {
     noDataText.classList.add('hidden');
     dataMessageBox.classList.add('hidden');
     
+    // 根據驗證後獲得的範圍抓取資料
     const url = `${SCRIPT_URL}?type=${currentValidStoreType}&value=${encodeURIComponent(currentValidStoreValue || '')}`;
     
     try {
@@ -276,7 +271,6 @@ async function fetchOrders() {
 
         renderTable(); 
         if(typeof renderLongTermTable === 'function') renderLongTermTable();
-
     } catch(e) { 
         console.error(e); 
         dataMessageBox.classList.remove('hidden');
@@ -381,7 +375,7 @@ function renderTable() {
         let dateDisplay = '';
         if(order['採購日期']) dateDisplay += `<div class="text-xs text-blue-600">採購: ${formatDateMMDD(order['採購日期'])}</div>`;
         if(order['到貨日期']) dateDisplay += `<div class="text-xs text-purple-600">到貨: ${formatDateMMDD(order['到貨日期'])}</div>`;
-        if(order['缺貨通知日期']) dateDisplay += `<div class="text-xs text-red-600 font-bold">缺貨通知: ${formatDateMMDD(order['缺貨通知日期'])}</div>`;
+        if(order['缺貨通知日期']) dateDisplay += `<div class="text-xs text-red-600 font-bold">缺貨通知: ${formatDateMMDD(order['傾貨通知日期'])}</div>`;
         if(order['未接電話日期']) dateDisplay += `<div class="text-xs text-red-500">未接: ${formatMulti(order['未接電話日期'])}</div>`;
         if(order['通知日期']) dateDisplay += `<div class="text-xs text-orange-600">通知: ${formatMulti(order['通知日期'])}</div>`;
         if(order['取走日期']) dateDisplay += `<div class="text-xs text-green-600">取走: ${formatDateMMDD(order['取走日期'])}</div>`;
@@ -443,270 +437,3 @@ window.setFilter = (key) => {
 searchButton.addEventListener('click', renderTable);
 searchInput.addEventListener('input', renderTable);
 refreshButton.addEventListener('click', fetchOrders);
-
-// ==========================================
-// 4. 新增、編輯與刪除 (CRUD)
-// ==========================================
-
-orderForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formStoreVal = document.getElementById('formStoreSelect').value;
-    if(!formStoreVal) { alert('請選擇要建檔的店別！'); return; }
-    
-    submitButton.disabled = true; 
-    submitButton.textContent = '送出中...';
-    
-    try {
-      const fd = new FormData(orderForm);
-      fd.append('action', 'append');
-      await fetch(SCRIPT_URL, { method: 'POST', body: fd });
-      alert('訂單已送出'); 
-      orderForm.reset(); 
-      setupFormStoreSelect();
-      fetchOrders();
-    } catch(err) { alert('失敗: '+err.message); } finally { submitButton.disabled = false; submitButton.textContent = '送出訂單'; }
-});
-
-const phoneInput = document.getElementById('phone');
-const phoneWarning = document.getElementById('phone-warning');
-
-phoneInput.addEventListener('input', function() {
-    const inputVal = this.value.trim().replace(/\D/g, ''); 
-    const inputNoZero = inputVal.replace(/^0+/, ''); 
-    
-    phoneWarning.classList.add('hidden');
-    this.style.borderColor = ''; 
-    this.style.backgroundColor = '';
-    
-    if (inputNoZero.length < 6) return;
-    
-    const found = allBlacklistData.find(row => {
-        const data = resolveBlacklistRowData(row);
-        const rawPhone = data.phone;
-        const rowPhoneNoZero = String(rawPhone).replace(/\D/g, '').replace(/^0+/, '');
-        return rowPhoneNoZero && rowPhoneNoZero === inputNoZero;
-    });
-
-    if (found) {
-         const data = resolveBlacklistRowData(found);
-         phoneWarning.classList.remove('hidden');
-         phoneWarning.textContent = `⚠️ 此號碼在黑名單中！(${data.reason})`;
-         this.style.borderColor = 'red'; 
-         this.style.backgroundColor = '#fef2f2';
-    }
-});
-
-function setupStoreTransferUI() {
-    const currentStoreName = getSelectedStoreName();
-    storeTransferOptionsContainer.innerHTML = '';
-    allStoresCache.forEach(store => {
-        if (!store.name || store.name === '店名' || store.name === currentStoreName) return;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn bg-white border border-gray-200 text-gray-600 text-xs px-2 py-1 hover:bg-gray-50';
-        btn.textContent = `⇄ ${store.name}`;
-        btn.onclick = () => { editTransferStoreInput.value = store.name; };
-        storeTransferOptionsContainer.appendChild(btn);
-    });
-}
-
-clearStoreTransferBtn.addEventListener('click', () => {
-    editTransferStoreInput.value = '';
-    editTransferDateInput.value = '';
-    editStoreTransferHidden.value = '';
-});
-
-function openEditModal(order) {
-    document.getElementById('editRowIndex').value = order['__row'];
-    document.getElementById('editCustomerID').value = order['客號']||'';
-    document.getElementById('editCustomerName').value = order['姓名']||'';
-    document.getElementById('editPhone').value = order['電話']||order['連絡電話']||'';
-    
-    document.getElementById('editProductAName').value = order['客訂商品A']||'';
-    document.getElementById('editProductAOutStock').checked = isChecked(order['A缺貨']);
-    document.getElementById('editProductASpec').value = order['A商品規格']||'';
-    document.getElementById('editProductAQty').value = order['A數量']||'';
-    
-    document.getElementById('editProductBName').value = order['客訂商品B']||'';
-    document.getElementById('editProductBOutStock').checked = isChecked(order['B缺貨']);
-    document.getElementById('editProductBSpec').value = order['B商品規格']||'';
-    document.getElementById('editProductBQty').value = order['B數量']||'';
-    
-    document.getElementById('editPaid').checked = (order['paid'] === '是' || order['paid'] === true || order['付清'] === '是');
-    document.getElementById('editNotes').value = order['備註']||'';
-    document.getElementById('editLineName').value = order['LINE名稱'] || '';
-    document.getElementById('editLineNotify').checked = isChecked(order['Line通知']);
-    
-    setInputDate('editPurchaseDate', order['採購日期']);
-    setInputDate('editArrivalDate', order['到貨日期']);
-    setInputDate('editOutStockDate', order['缺貨通知日期']);
-    setInputDate('editPickupDate', order['取走日期']);
-    
-    setupStoreTransferUI();
-    
-    const transferVal = order['分店調撥'] || '';
-    editStoreTransferHidden.value = transferVal;
-    editTransferStoreInput.value = '';
-    editTransferDateInput.value = '';
-    
-    if (transferVal && transferVal.includes('⇄')) {
-        const content = transferVal.replace('⇄', '').trim();
-        const parts = content.split(/\s+/);
-        if (parts.length >= 2) {
-            const dateStr = parts.pop();
-            const storeName = parts.join(' ');
-            editTransferStoreInput.value = storeName;
-            const d = new Date(dateStr);
-            if (!isNaN(d.getTime())) {
-                editTransferDateInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-            }
-        } else {
-             editTransferStoreInput.value = content;
-        }
-    }
-
-    try {
-      const missed = parseMultiDateStringToArray(order['未接電話日期']);
-      const notify = parseMultiDateStringToArray(order['通知日期']);
-      editMissedCtrl.setItems(missed);
-      editNotifyCtrl.setItems(notify);
-    } catch(e) { console.warn(e); }
-
-    editModal.classList.remove('hidden');
-}
-
-document.getElementById('editForm').addEventListener('submit', async(e)=>{ 
-    e.preventDefault(); 
-    const tStore = editTransferStoreInput.value.trim();
-    const tDate = editTransferDateInput.value;
-    if (tStore) {
-        editStoreTransferHidden.value = `⇄ ${tStore} ${tDate}`; 
-    } else {
-        editStoreTransferHidden.value = '';
-    }
-    const fd = new FormData(e.target); 
-    
-    if (!document.getElementById('editProductAOutStock').checked) fd.append('A缺貨', '');
-    if (!document.getElementById('editProductBOutStock').checked) fd.append('B缺貨', '');
-    if (!document.getElementById('editPaid').checked) fd.append('付清', '');
-    if (!document.getElementById('editLineNotify').checked) fd.append('Line通知', '');
-
-    fd.append('action','update'); 
-    try {
-        await fetch(SCRIPT_URL, { method: 'POST', body: fd }); 
-        alert('更新成功'); 
-        editModal.classList.add('hidden'); 
-        fetchOrders(); 
-    } catch(err) { alert('更新失敗: ' + err.message); }
-});
-
-document.getElementById('deleteEdit').addEventListener('click', () => { 
-    if(confirm('確定要刪除這筆訂單嗎？')) { deleteRow(document.getElementById('editRowIndex').value); }
-});
-
-async function deleteRow(idx) { 
-    const fd = new FormData(); 
-    fd.append('action', 'delete'); 
-    fd.append('row', idx); 
-    try {
-        await fetch(SCRIPT_URL, { method: 'POST', body: fd }); 
-        alert('已刪除'); 
-        editModal.classList.add('hidden'); 
-        const ltModal = document.getElementById('longTerm_editModalBackdrop');
-        if(ltModal) ltModal.classList.add('hidden');
-        fetchOrders(); 
-    } catch(err) { alert('刪除失敗: ' + err.message); }
-}
-
-document.getElementById('closeEditModal').addEventListener('click', () => editModal.classList.add('hidden'));
-
-// ==========================================
-// 5. 歷史查詢 (History Search)
-// ==========================================
-const historyModalBackdrop = document.getElementById('historyModalBackdrop');
-const historySearchInput = document.getElementById('historySearchInput');
-const historyTableBody = document.getElementById('history-table-body');
-const historyTableHeaders = document.getElementById('history-table-headers');
-const historyNoData = document.getElementById('historyNoData');
-const historyLoader = document.getElementById('historyLoader');
-
-document.getElementById('searchHistoryBtn').addEventListener('click', () => {
-    const store = storeSelect.value;
-    if (!store) { alert('請先選擇分店才能查詢該店的歷史資料'); return; }
-    historySearchInput.value = '';
-    historyTableBody.innerHTML = '';
-    historyTableHeaders.innerHTML = '';
-    historyNoData.textContent = '請輸入關鍵字進行搜尋';
-    historyNoData.classList.remove('hidden');
-    historyModalBackdrop.classList.remove('hidden');
-});
-
-document.getElementById('closeHistoryModal').addEventListener('click', () => historyModalBackdrop.classList.add('hidden'));
-document.getElementById('historySearchBtn').addEventListener('click', performHistorySearch);
-historySearchInput.addEventListener('keydown', (e) => { if(e.key==='Enter') performHistorySearch(); });
-
-async function performHistorySearch() {
-    const store = storeSelect.value;
-    const term = historySearchInput.value.trim();
-    if (!term) { alert('請輸入搜尋關鍵字 (例如姓名、電話或商品名稱)'); return; }
-    
-    historyLoader.classList.remove('hidden');
-    historyTableBody.innerHTML = '';
-    historyTableHeaders.innerHTML = ''; 
-    historyNoData.classList.add('hidden');
-    
-    try {
-        const url = `${SCRIPT_URL}?action=search_history&type=${currentValidStoreType}&value=${encodeURIComponent(currentValidStoreValue)}&term=${encodeURIComponent(term)}`;
-        const resp = await fetch(url);
-        const json = await resp.json();
-        
-        if(json.result === 'success') {
-            let rows = json.rows || [];
-            const headers = json.headers || [];
-            if (term) {
-                const lowerTerm = term.toLowerCase();
-                rows = rows.filter(r => {
-                    return Object.entries(r).some(([key, val]) => {
-                        if (key === '__row') return false;
-                        return String(val).toLowerCase().includes(lowerTerm);
-                    });
-                });
-            }
-            if(rows.length === 0) {
-                historyNoData.textContent = '查無符合資料';
-                historyNoData.classList.remove('hidden');
-            } else {
-                renderHistoryTable(headers, rows);
-            }
-        } else { alert('查詢失敗：' + json.error); }
-    } catch(e) { console.error(e); alert('查詢錯誤'); } finally { historyLoader.classList.add('hidden'); }
-}
-
-function renderHistoryTable(headers, rows) {
-    historyTableHeaders.innerHTML = '';
-    const displayCols = ['歸檔日期', '客號', '姓名', '電話', '連絡電話', '客訂商品A', '商品', '取走日期', '備註'];
-    const colNames = [];
-    headers.forEach(h => {
-        const shouldShow = displayCols.some(k => h.includes(k)) || h.includes('Date') || h.includes('日期');
-        if(shouldShow) { 
-            const th = document.createElement('th');
-            th.textContent = h;
-            th.className = "sticky top-0 bg-gray-100 px-4 py-2 border-b font-bold whitespace-nowrap";
-            historyTableHeaders.appendChild(th);
-            colNames.push(h);
-        }
-    });
-    rows.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.className = "hover:bg-gray-50 border-b";
-        colNames.forEach(key => {
-            const td = document.createElement('td');
-            td.className = "px-4 py-2 whitespace-nowrap text-sm";
-            let val = row[key]; 
-            if(typeof val === 'string' && val.includes('T') && val.includes(':')) { val = val.split('T')[0]; }
-            td.textContent = (val !== undefined && val !== null) ? val : '-';
-            tr.appendChild(td);
-        });
-        historyTableBody.appendChild(tr);
-    });
-}
