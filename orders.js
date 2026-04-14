@@ -173,6 +173,14 @@ async function fetchOrders() {
     const dataTableBody = document.getElementById('data-table-body');
     if(!dataLoader || !dataTableBody) return;
 
+    if (currentValidStoreType === 'ALL' || !currentValidStoreValue) {
+        allOrders = []; 
+        allLongTermOrders = [];
+        renderTable(); 
+        if(typeof renderLongTermTable === 'function') renderLongTermTable();
+        return;
+    }
+
     dataLoader.classList.remove('hidden');
     dataTableBody.innerHTML = '';
     const url = `${SCRIPT_URL}?type=${currentValidStoreType}&value=${encodeURIComponent(currentValidStoreValue || '')}`;
@@ -211,7 +219,10 @@ function renderTable() {
     filtered.sort((a,b) => new Date(b['最後更新時間'] || b['建立日期'] || 0) - new Date(a['最後更新時間'] || a['建立日期'] || 0));
     
     if(filtered.length === 0) { 
-        noDataText && noDataText.classList.remove('hidden'); 
+        if (noDataText) {
+            noDataText.textContent = (currentValidStoreType === 'ALL') ? '請先於上方選擇店別以查看訂單' : '沒有找到符合的訂單';
+            noDataText.classList.remove('hidden'); 
+        }
         tableContainer && tableContainer.classList.add('hidden'); 
         return; 
     } 
