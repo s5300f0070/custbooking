@@ -681,10 +681,11 @@
     });
   </script>
 
-  <script src="utils.js"></script>
-  <script src="admin.js"></script>
-  <script src="dashboard.js"></script>
-  <script src="orders.js"></script>
+<!-- ✅ JS 正確載入順序 + defer（關鍵修正） -->
+<script src="utils.js" defer></script>
+<script src="orders.js" defer></script>
+<script src="admin.js" defer></script>
+<script src="dashboard.js" defer></script>
 
 </body>
 </html>
