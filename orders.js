@@ -15,6 +15,7 @@ function populateStoreSelect(region) {
     if (!region) { storeSelect.disabled = true; return; }
 
     storeSelect.disabled = false;
+    
     let targetStores = (region === 'OTHER') 
         ? allStoresCache.filter(s => !s.region && s.code)
         : allStoresCache.filter(s => s.region === region && s.code);
@@ -72,7 +73,9 @@ async function fetchStores() {
         const savedVal = localStorage.getItem('selected_store_value');
         if(savedVal) {
             let targetRegion = '';
-            if (savedVal.startsWith('STORE_')) {
+            if (savedVal.startsWith('REGION_')) {
+                targetRegion = savedVal.replace('REGION_', '');
+            } else if (savedVal.startsWith('STORE_')) {
                 const sCode = savedVal.replace('STORE_', '');
                 const st = allStoresCache.find(s => s.code === sCode);
                 if (st) targetRegion = st.region ? st.region : 'OTHER';
@@ -80,11 +83,25 @@ async function fetchStores() {
             if (targetRegion && regionSelect) {
                 regionSelect.value = targetRegion;
                 populateStoreSelect(targetRegion);
+                
+                // 若記憶的狀態為全區模式，則動態生出隱藏的全區選項以供選擇
+                if (savedVal.startsWith('REGION_')) {
+                    const allOpt = document.createElement('option');
+                    allOpt.value = savedVal;
+                    allOpt.dataset.type = 'REGION';
+                    allOpt.dataset.value = targetRegion;
+                    allOpt.dataset.name = `全區 (${targetRegion})`;
+                    allOpt.dataset.region = targetRegion;
+                    allOpt.textContent = `👁️ ${targetRegion} 全區`;
+                    allOpt.style.display = 'none';
+                    storeSelect.appendChild(allOpt);
+                }
+
                 if (Array.from(storeSelect.options).some(o => o.value === savedVal)) {
                     storeSelect.value = savedVal; 
                     previousStoreSelectValue = savedVal;
                     currentValidStoreType = localStorage.getItem('auth_type') || 'STORE';
-                    currentValidStoreValue = localStorage.getItem('auth_value') || savedVal.replace('STORE_', '');
+                    currentValidStoreValue = localStorage.getItem('auth_value') || (savedVal.startsWith('REGION_') ? targetRegion : savedVal.replace('STORE_', ''));
                     updateStoreDisplay(); 
                     setupFormStoreSelect();
                 }
@@ -101,11 +118,13 @@ storeSelect.addEventListener('change', async () => {
         localStorage.removeItem('selected_store_value'); updateStoreDisplay(); fetchOrders(); return;
     }
 
+    if (selectedOption.dataset.type === 'REGION') return;
+
     const storeCode = selectedOption.dataset.value;
-    const storeName = selectedOption.text.replace(/^[🌟📍📁🏠]\s*/, '');
+    const storeName = selectedOption.dataset.name;
     const storeRegion = selectedOption.dataset.region;
 
-    const input = prompt(`請輸入 ${storeName} 的店密碼，\n或輸入【區經理代碼】查看該區域所有訂單：`);
+    const input = prompt(`請輸入 ${storeName} 的店密碼：`);
     if (!input) { storeSelect.value = previousStoreSelectValue; return; }
 
     try {
@@ -118,8 +137,8 @@ storeSelect.addEventListener('change', async () => {
         const json = await resp.json();
 
         if (json.result === 'success') {
-            currentValidStoreType = json.scope; 
-            currentValidStoreValue = json.authorizedValue;
+            currentValidStoreType = 'STORE'; 
+            currentValidStoreValue = storeCode;
             previousStoreSelectValue = selectedOption.value;
             localStorage.setItem('selected_store_value', selectedOption.value);
             localStorage.setItem('auth_type', currentValidStoreType);
@@ -128,7 +147,7 @@ storeSelect.addEventListener('change', async () => {
             updateStoreDisplay();
             setupFormStoreSelect();
             if(typeof checkStoreSettings === 'function') checkStoreSettings();
-            if (json.scope === 'REGION') alert(`區經理驗證成功！已解鎖【${storeRegion}】區域。`);
+            
             fetchOrders();
         } else {
             alert('驗證失敗：密碼錯誤。');
@@ -195,16 +214,17 @@ function renderTable() {
 
         tr.onclick = (e) => { if(!e.target.closest('button')) openEditModal(order); };
         const status = getStatus(order);
-        const storeTag = `<div class="text-xs font-bold text-gray-500 mb-1">📍 ${order['店編號']||order['店別']||''}</div>`;
         
-        // 渲染商品，並支援缺貨狀態顯示與商品B
+        const storeTag = currentValidStoreType !== 'STORE' 
+            ? `<div class="text-xs font-bold text-gray-500 mb-1">📍 ${order['店編號']||order['店別']||''}</div>` 
+            : '';
+        
         const isAOut = isChecked(order['A缺貨']) ? '<span class="text-red-600 font-bold mr-1">[缺貨]</span>' : '';
         const productA = order['客訂商品A'] ? `${isAOut}[${order['客訂商品A']}]${order['A商品規格'] ? `(${order['A商品規格']})` : ''} ${order['A數量'] ? 'x' + order['A數量'] : ''}` : '';
         
         const isBOut = isChecked(order['B缺貨']) ? '<span class="text-red-600 font-bold mr-1">[缺貨]</span>' : '';
         const productB = order['客訂商品B'] ? `${isBOut}[${order['客訂商品B']}]${order['B商品規格'] ? `(${order['B商品規格']})` : ''} ${order['B數量'] ? 'x' + order['B數量'] : ''}` : '';
 
-        // 處理多日期進度格式（套用圖片中的樣式）
         const formatMulti = (val) => {
             if(!val) return '';
             const parts = String(val).split(/[,;，\s]+/).filter(Boolean);
@@ -217,6 +237,7 @@ function renderTable() {
         };
 
         let dateDisplay = '';
+        if(order['分店調撥']) dateDisplay += `<div class="text-xs text-indigo-600 font-bold">調撥: ${String(order['分店調撥']).trim()}</div>`;
         if(order['採購日期']) dateDisplay += `<div class="text-xs text-blue-600">採購: ${formatMulti(order['採購日期'])}</div>`;
         if(order['到貨日期']) dateDisplay += `<div class="text-xs text-purple-600">到貨: ${formatMulti(order['到貨日期'])}</div>`;
         if(order['缺貨通知日期']) dateDisplay += `<div class="text-xs text-red-600 font-bold">缺貨通知: ${formatMulti(order['缺貨通知日期'])}</div>`;
@@ -275,3 +296,67 @@ function renderTabs() {
     container.innerHTML = STATUS_TABS.map(tab => `<button class="tab-btn ${tab.key === currentFilter ? 'active' : ''}" onclick="setFilter('${tab.key}')">${tab.label}</button>`).join('');
 }
 window.setFilter = (key) => { currentFilter = key; renderTabs(); renderTable(); };
+
+// 區經理模式綁定
+const regionManagerBtn = document.getElementById('regionManagerBtn');
+if (regionManagerBtn) {
+    regionManagerBtn.addEventListener('click', async () => {
+        const region = regionSelect ? regionSelect.value : '';
+        if (!region) {
+            alert('請先於左側下拉選單選擇要查看的「區域」！');
+            return;
+        }
+        
+        const input = prompt(`請輸入【${region}】區的區經理代碼：`);
+        if (!input) return;
+
+        try {
+            const firstStore = allStoresCache.find(s => s.region === region && s.code);
+            const storeCodeForCheck = firstStore ? firstStore.code : '';
+
+            const fd = new FormData();
+            fd.append('action', 'verify_store_password');
+            fd.append('storeCode', storeCodeForCheck);
+            fd.append('password', input.trim());
+            
+            const resp = await fetch(SCRIPT_URL, { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if (json.result === 'success' && json.scope === 'REGION') {
+                currentValidStoreType = 'REGION'; 
+                currentValidStoreValue = json.authorizedValue || region;
+                
+                let allOpt = Array.from(storeSelect.options).find(o => o.value === `REGION_${currentValidStoreValue}`);
+                if (!allOpt) {
+                    allOpt = document.createElement('option');
+                    allOpt.value = `REGION_${currentValidStoreValue}`;
+                    allOpt.dataset.type = 'REGION';
+                    allOpt.dataset.value = currentValidStoreValue;
+                    allOpt.dataset.name = `全區 (${currentValidStoreValue})`;
+                    allOpt.dataset.region = currentValidStoreValue;
+                    allOpt.textContent = `👁️ ${currentValidStoreValue} 全區`;
+                    allOpt.style.display = 'none';
+                    storeSelect.appendChild(allOpt);
+                }
+                
+                storeSelect.value = allOpt.value;
+                previousStoreSelectValue = allOpt.value;
+
+                localStorage.setItem('selected_store_value', allOpt.value);
+                localStorage.setItem('auth_type', currentValidStoreType);
+                localStorage.setItem('auth_value', currentValidStoreValue);
+
+                updateStoreDisplay();
+                if (typeof setupFormStoreSelect === 'function') setupFormStoreSelect();
+                if (typeof checkStoreSettings === 'function') checkStoreSettings();
+                
+                alert(`區經理驗證成功！已進入【${currentValidStoreValue}】全區模式。`);
+                fetchOrders();
+            } else {
+                alert('驗證失敗：區經理代碼錯誤或權限不足。');
+            }
+        } catch (e) {
+            alert('連線失敗');
+        }
+    });
+}
